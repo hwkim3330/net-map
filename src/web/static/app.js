@@ -25,6 +25,11 @@ class NetMap {
         this.nodes = new Map();
         this.links = new Map();
 
+        // Pagination
+        this.pageSize = 100;
+        this.currentPage = 1;
+        this.autoScroll = true;
+
         this.initElements();
         this.initCharts();
         this.initTopology();
@@ -386,31 +391,78 @@ class NetMap {
         // Update topology
         this.updateTopologyData(pkt);
 
-        // Add to table
-        const row = document.createElement('tr');
-        row.className = `proto-${proto.toLowerCase()}`;
-        row.dataset.id = pkt.id;
-
-        const time = this.formatTime(pkt.timestamp);
-
-        row.innerHTML = `
-            <td class="col-no">${pkt.id}</td>
-            <td class="col-time">${time}</td>
-            <td class="col-src">${pkt.src || '-'}</td>
-            <td class="col-dst">${pkt.dst || '-'}</td>
-            <td class="col-proto">${proto}</td>
-            <td class="col-len">${pkt.length}</td>
-            <td class="col-info">${pkt.info || ''}</td>
-        `;
-
-        row.addEventListener('click', () => this.selectPacket(pkt, row));
-        this.packetTbody.appendChild(row);
-
-        // Auto-scroll
-        const container = document.querySelector('.packet-table-container');
-        if (container) {
-            container.scrollTop = container.scrollHeight;
+        // Update pagination if on last page or auto-scroll enabled
+        const totalPages = Math.ceil(this.packets.length / this.pageSize);
+        if (this.autoScroll || this.currentPage === totalPages - 1) {
+            this.currentPage = totalPages;
+            this.renderPacketTable();
         }
+        this.updatePagination();
+    }
+
+    renderPacketTable() {
+        const start = (this.currentPage - 1) * this.pageSize;
+        const end = start + this.pageSize;
+        const pagePackets = this.packets.slice(start, end);
+
+        this.packetTbody.innerHTML = '';
+
+        pagePackets.forEach(pkt => {
+            const proto = pkt.protocol || 'Unknown';
+            const row = document.createElement('tr');
+            row.className = `proto-${proto.toLowerCase()}`;
+            row.dataset.id = pkt.id;
+
+            const time = this.formatTime(pkt.timestamp);
+
+            row.innerHTML = `
+                <td class="col-no">${pkt.id}</td>
+                <td class="col-time">${time}</td>
+                <td class="col-src">${pkt.src || '-'}</td>
+                <td class="col-dst">${pkt.dst || '-'}</td>
+                <td class="col-proto">${proto}</td>
+                <td class="col-len">${pkt.length}</td>
+                <td class="col-info">${pkt.info || ''}</td>
+            `;
+
+            row.addEventListener('click', () => this.selectPacket(pkt, row));
+            this.packetTbody.appendChild(row);
+        });
+    }
+
+    updatePagination() {
+        const totalPages = Math.ceil(this.packets.length / this.pageSize) || 1;
+        const paginationEl = document.getElementById('pagination-info');
+        if (paginationEl) {
+            paginationEl.textContent = `Page ${this.currentPage} / ${totalPages} (${this.packets.length} packets)`;
+        }
+    }
+
+    goToPage(page) {
+        const totalPages = Math.ceil(this.packets.length / this.pageSize) || 1;
+        if (page < 1) page = 1;
+        if (page > totalPages) page = totalPages;
+        this.currentPage = page;
+        this.autoScroll = (page === totalPages);
+        this.renderPacketTable();
+        this.updatePagination();
+    }
+
+    prevPage() {
+        this.goToPage(this.currentPage - 1);
+    }
+
+    nextPage() {
+        this.goToPage(this.currentPage + 1);
+    }
+
+    firstPage() {
+        this.goToPage(1);
+    }
+
+    lastPage() {
+        const totalPages = Math.ceil(this.packets.length / this.pageSize) || 1;
+        this.goToPage(totalPages);
     }
 
     updateTopologyData(pkt) {

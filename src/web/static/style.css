@@ -47,13 +47,14 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: var(--bg-primary);
     color: var(--text-primary);
     height: 100vh;
     display: flex;
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
 }
 
 /* Sidebar */
@@ -242,24 +243,6 @@ body {
     50% { opacity: 0.5; }
 }
 
-.keti-logo {
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid var(--border-color);
-    text-align: center;
-}
-
-.keti-logo img {
-    max-width: 100px;
-    height: auto;
-    opacity: 0.7;
-    transition: opacity 0.2s;
-}
-
-.keti-logo img:hover {
-    opacity: 1;
-}
-
 /* Main Content */
 .main-content {
     flex: 1;
@@ -272,8 +255,8 @@ body {
 /* Tab Navigation */
 .tab-nav {
     display: flex;
-    gap: 4px;
-    padding: 16px 24px;
+    gap: 2px;
+    padding: 12px 24px;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-color);
 }
@@ -282,29 +265,33 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 10px 20px;
+    padding: 10px 24px;
     background: transparent;
     border: none;
-    border-radius: var(--radius-sm);
-    font-size: 14px;
+    border-radius: 20px;
+    font-size: 13px;
     font-weight: 500;
     color: var(--text-secondary);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.2s ease;
+    position: relative;
 }
 
 .tab-btn:hover {
-    background: var(--bg-tertiary);
+    background: rgba(0, 0, 0, 0.04);
     color: var(--text-primary);
 }
 
 .tab-btn.active {
-    background: var(--accent-blue);
+    background: var(--text-primary);
     color: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .tab-btn svg {
-    opacity: 0.7;
+    opacity: 0.6;
+    width: 16px;
+    height: 16px;
 }
 
 .tab-btn.active svg {
@@ -410,7 +397,42 @@ body {
 
 .panel-actions {
     display: flex;
-    gap: 12px;
+    align-items: center;
+    gap: 16px;
+}
+
+/* Pagination */
+.pagination {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.page-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 6px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.page-btn:hover {
+    background: var(--text-primary);
+    color: white;
+}
+
+.page-info {
+    font-size: 12px;
+    color: var(--text-secondary);
+    padding: 0 12px;
+    font-weight: 500;
+    white-space: nowrap;
 }
 
 .search-input {
@@ -418,8 +440,9 @@ body {
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     font-size: 13px;
+    font-family: inherit;
     background: var(--bg-tertiary);
-    width: 240px;
+    width: 180px;
     outline: none;
 }
 

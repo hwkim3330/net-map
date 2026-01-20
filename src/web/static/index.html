@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Net-Map</title>
-    <link rel="icon" type="image/png" href="/icon.png">
+    <link rel="icon" type="image/png" href="/logo.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
     <link rel="stylesheet" href="style.css">
@@ -13,7 +16,7 @@
     <!-- Sidebar -->
     <aside class="sidebar">
         <div class="sidebar-header">
-            <img src="/icon.png" alt="Net-Map" class="logo">
+            <img src="/logo.png" alt="Net-Map" class="logo">
             <span class="logo-text">Net-Map</span>
         </div>
 
@@ -72,9 +75,6 @@
             <div class="capture-indicator" id="capture-indicator">
                 <span class="indicator-dot"></span>
                 <span id="capture-status-text">Stopped</span>
-            </div>
-            <div class="keti-logo">
-                <img src="/logo.png" alt="KETI" onerror="this.style.display='none'">
             </div>
         </div>
     </aside>
@@ -161,7 +161,22 @@
                 <div class="panel-header">
                     <span class="panel-title">Packet List</span>
                     <div class="panel-actions">
-                        <input type="text" id="search-input" class="search-input" placeholder="Search packets...">
+                        <div class="pagination">
+                            <button class="page-btn" onclick="netmap.firstPage()" title="First">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M18.41 16.59L13.82 12l4.59-4.59L17 6l-6 6 6 6zM6 6h2v12H6z"/></svg>
+                            </button>
+                            <button class="page-btn" onclick="netmap.prevPage()" title="Previous">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+                            </button>
+                            <span id="pagination-info" class="page-info">Page 1 / 1</span>
+                            <button class="page-btn" onclick="netmap.nextPage()" title="Next">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+                            </button>
+                            <button class="page-btn" onclick="netmap.lastPage()" title="Last">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M5.59 7.41L10.18 12l-4.59 4.59L7 18l6-6-6-6zM16 6h2v12h-2z"/></svg>
+                            </button>
+                        </div>
+                        <input type="text" id="search-input" class="search-input" placeholder="Search...">
                     </div>
                 </div>
                 <div class="packet-table-container">

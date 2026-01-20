@@ -16,6 +16,11 @@
 #include <string.h>
 #include <signal.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#include <shellapi.h>
+#endif
+
 #define DEFAULT_PORT 8080
 #define DEFAULT_BUFFER_SIZE 100000
 #define STATIC_DIR "./static"
@@ -40,6 +45,36 @@ static void print_usage(const char *prog) {
     printf("  -l              List available interfaces\n");
     printf("  -h              Show this help\n");
     printf("\nInterface selection is done via the web UI.\n");
+}
+
+static void open_browser(int port) {
+#ifdef _WIN32
+    char url[64];
+    snprintf(url, sizeof(url), "http://localhost:%d", port);
+    ShellExecuteA(NULL, "open", url, NULL, NULL, SW_SHOWNORMAL);
+#elif defined(__APPLE__)
+    char cmd[128];
+    snprintf(cmd, sizeof(cmd), "open http://localhost:%d", port);
+    system(cmd);
+#else
+    char cmd[128];
+    snprintf(cmd, sizeof(cmd), "xdg-open http://localhost:%d &", port);
+    system(cmd);
+#endif
+}
+
+static void print_local_ips(void) {
+    device_info_t *devices;
+    int count = get_device_list(&devices);
+    if (count <= 0) return;
+
+    printf("Local IP addresses:\n");
+    for (int i = 0; i < count; i++) {
+        if (devices[i].ip_addr[0] && !devices[i].is_loopback && devices[i].is_up) {
+            printf("  - %s (%s)\n", devices[i].ip_addr, devices[i].description);
+        }
+    }
+    free_device_list(devices, count);
 }
 
 static void list_devices(void) {
@@ -131,9 +166,16 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    printf("\nOpen http://localhost:%d in your browser\n", port);
-    printf("Select interface and click Start to begin capturing.\n");
+    printf("\n========================================\n");
+    printf("  Net-Map - Packet Sniffer\n");
+    printf("========================================\n");
+    printf("Web UI: http://localhost:%d\n\n", port);
+    print_local_ips();
+    printf("\nOpening browser...\n");
     printf("Press Ctrl+C to stop\n\n");
+
+    // Auto-open browser
+    open_browser(port);
 
     // Main loop
     while (g_running) {
