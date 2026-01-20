@@ -3,77 +3,216 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Net-Map - Packet Sniffer</title>
+    <title>Net-Map</title>
     <link rel="icon" type="image/png" href="/icon.png">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- Header -->
-    <header class="header">
-        <div class="header-left">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
             <img src="/icon.png" alt="Net-Map" class="logo">
-            <h1>Net-Map</h1>
+            <span class="logo-text">Net-Map</span>
         </div>
-        <div class="header-center">
-            <select id="device-select" class="device-select">
-                <option value="">Select Interface...</option>
+
+        <div class="sidebar-section">
+            <label class="section-label">Interface</label>
+            <select id="device-select" class="select-input">
+                <option value="">Select...</option>
             </select>
-            <input type="text" id="filter-input" class="filter-input" placeholder="BPF Filter (e.g., tcp port 80)">
-            <button id="start-btn" class="btn btn-start">Start</button>
-            <button id="stop-btn" class="btn btn-stop" disabled>Stop</button>
-            <button id="clear-btn" class="btn btn-clear">Clear</button>
         </div>
-        <div class="header-right">
-            <div class="stats">
-                <span id="packet-count">0</span> packets
-                <span class="divider">|</span>
-                <span id="byte-count">0</span> bytes
+
+        <div class="sidebar-section">
+            <label class="section-label">Filter (BPF)</label>
+            <input type="text" id="filter-input" class="text-input" placeholder="e.g., tcp port 80">
+        </div>
+
+        <div class="sidebar-section btn-group">
+            <button id="start-btn" class="btn btn-primary">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                    <path d="M8 5v14l11-7z"/>
+                </svg>
+                Start
+            </button>
+            <button id="stop-btn" class="btn btn-danger" disabled>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                    <rect x="6" y="6" width="12" height="12"/>
+                </svg>
+                Stop
+            </button>
+        </div>
+
+        <div class="sidebar-section">
+            <button id="clear-btn" class="btn btn-secondary btn-full">Clear Packets</button>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="stats-cards">
+            <div class="stat-card">
+                <div class="stat-value" id="packet-count">0</div>
+                <div class="stat-label">Packets</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="byte-count">0 B</div>
+                <div class="stat-label">Total Size</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="pps-count">0</div>
+                <div class="stat-label">Packets/sec</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="bps-count">0 B/s</div>
+                <div class="stat-label">Throughput</div>
             </div>
         </div>
-    </header>
+
+        <div class="sidebar-footer">
+            <div class="capture-indicator" id="capture-indicator">
+                <span class="indicator-dot"></span>
+                <span id="capture-status-text">Stopped</span>
+            </div>
+            <div class="keti-logo">
+                <img src="/logo.png" alt="KETI" onerror="this.style.display='none'">
+            </div>
+        </div>
+    </aside>
 
     <!-- Main Content -->
-    <main class="main">
-        <!-- Packet List -->
-        <div class="packet-list-container">
-            <table class="packet-table" id="packet-table">
-                <thead>
-                    <tr>
-                        <th class="col-no">No.</th>
-                        <th class="col-time">Time</th>
-                        <th class="col-src">Source</th>
-                        <th class="col-dst">Destination</th>
-                        <th class="col-proto">Protocol</th>
-                        <th class="col-len">Length</th>
-                        <th class="col-info">Info</th>
-                    </tr>
-                </thead>
-                <tbody id="packet-tbody">
-                </tbody>
-            </table>
+    <main class="main-content">
+        <!-- Tab Navigation -->
+        <div class="tab-nav">
+            <button class="tab-btn active" data-tab="dashboard">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                    <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
+                </svg>
+                Dashboard
+            </button>
+            <button class="tab-btn" data-tab="packets">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                    <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/>
+                </svg>
+                Packets
+            </button>
+            <button class="tab-btn" data-tab="topology">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                </svg>
+                Topology
+            </button>
         </div>
 
-        <!-- Detail Panel -->
-        <div class="detail-panel" id="detail-panel">
-            <div class="detail-header">
-                <span>Packet Details</span>
-                <button class="detail-close" id="detail-close">&times;</button>
+        <!-- Dashboard Tab -->
+        <div class="tab-content active" id="tab-dashboard">
+            <div class="charts-grid">
+                <!-- Traffic Chart -->
+                <div class="chart-card large">
+                    <div class="chart-header">
+                        <span class="chart-title">Traffic Over Time</span>
+                        <div class="chart-controls">
+                            <select id="chart-interval" class="mini-select">
+                                <option value="100">100ms</option>
+                                <option value="500" selected>500ms</option>
+                                <option value="1000">1s</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="chart-body">
+                        <canvas id="traffic-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Protocol Distribution -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <span class="chart-title">Protocol Distribution</span>
+                    </div>
+                    <div class="chart-body">
+                        <canvas id="protocol-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Top Talkers -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <span class="chart-title">Top Sources</span>
+                    </div>
+                    <div class="chart-body">
+                        <canvas id="sources-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Packet Size Distribution -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <span class="chart-title">Packet Sizes</span>
+                    </div>
+                    <div class="chart-body">
+                        <canvas id="size-chart"></canvas>
+                    </div>
+                </div>
             </div>
-            <div class="detail-content" id="detail-content">
-                <p class="no-selection">Select a packet to view details</p>
+        </div>
+
+        <!-- Packets Tab -->
+        <div class="tab-content" id="tab-packets">
+            <div class="packet-panel">
+                <div class="panel-header">
+                    <span class="panel-title">Packet List</span>
+                    <div class="panel-actions">
+                        <input type="text" id="search-input" class="search-input" placeholder="Search packets...">
+                    </div>
+                </div>
+                <div class="packet-table-container">
+                    <table class="packet-table" id="packet-table">
+                        <thead>
+                            <tr>
+                                <th class="col-no">No.</th>
+                                <th class="col-time">Time</th>
+                                <th class="col-src">Source</th>
+                                <th class="col-dst">Destination</th>
+                                <th class="col-proto">Protocol</th>
+                                <th class="col-len">Length</th>
+                                <th class="col-info">Info</th>
+                            </tr>
+                        </thead>
+                        <tbody id="packet-tbody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Detail Panel -->
+            <div class="detail-panel" id="detail-panel">
+                <div class="panel-header">
+                    <span class="panel-title">Packet Details</span>
+                    <button class="panel-close" id="detail-close">&times;</button>
+                </div>
+                <div class="detail-content" id="detail-content">
+                    <p class="no-selection">Select a packet to view details</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Topology Tab -->
+        <div class="tab-content" id="tab-topology">
+            <div class="topology-container">
+                <div class="topology-header">
+                    <span class="chart-title">Network Topology</span>
+                    <div class="topology-controls">
+                        <button id="topology-reset" class="btn btn-secondary btn-sm">Reset View</button>
+                    </div>
+                </div>
+                <div id="topology-graph" class="topology-graph"></div>
+                <div class="topology-legend">
+                    <div class="legend-item"><span class="legend-dot" style="background: #007AFF"></span> Source</div>
+                    <div class="legend-item"><span class="legend-dot" style="background: #34C759"></span> Destination</div>
+                    <div class="legend-item"><span class="legend-dot" style="background: #FF9500"></span> Both</div>
+                </div>
             </div>
         </div>
     </main>
-
-    <!-- Status Bar -->
-    <footer class="status-bar">
-        <div class="status-left">
-            <span id="status-text">Ready</span>
-        </div>
-        <div class="status-right">
-            <span id="capture-status" class="capture-status stopped">Stopped</span>
-        </div>
-    </footer>
 
     <script src="app.js"></script>
 </body>

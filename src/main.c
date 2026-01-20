@@ -2,9 +2,8 @@
  * net-map - Cross-platform packet sniffer with web UI
  *
  * Usage: net-map [options]
- *   -i <interface>  Network interface to capture on
  *   -p <port>       Web server port (default: 8080)
- *   -f <filter>     BPF filter expression
+ *   -l              List available interfaces
  *   -h              Show help
  */
 
@@ -24,7 +23,6 @@
 // Global state
 static volatile bool g_running = true;
 static packet_buffer_t *g_buffer = NULL;
-static capture_handle_t *g_capture = NULL;
 static server_t *g_server = NULL;
 
 // Signal handler
@@ -34,21 +32,14 @@ static void signal_handler(int sig) {
     g_running = false;
 }
 
-// Packet callback
-static void packet_callback(const packet_t *pkt, void *user_data) {
-    packet_buffer_t *buf = (packet_buffer_t*)user_data;
-    buffer_push(buf, pkt);
-}
-
 static void print_usage(const char *prog) {
     printf("net-map - Cross-platform packet sniffer\n\n");
     printf("Usage: %s [options]\n\n", prog);
     printf("Options:\n");
-    printf("  -i <interface>  Network interface to capture on\n");
     printf("  -p <port>       Web server port (default: %d)\n", DEFAULT_PORT);
-    printf("  -f <filter>     BPF filter expression\n");
     printf("  -l              List available interfaces\n");
     printf("  -h              Show this help\n");
+    printf("\nInterface selection is done via the web UI.\n");
 }
 
 static void list_devices(void) {
@@ -82,19 +73,12 @@ static void list_devices(void) {
 }
 
 int main(int argc, char *argv[]) {
-    char *interface = NULL;
-    char *filter = NULL;
     int port = DEFAULT_PORT;
-    char errbuf[PCAP_ERRBUF_SIZE];
 
     // Parse arguments
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-i") == 0 && i + 1 < argc) {
-            interface = argv[++i];
-        } else if (strcmp(argv[i], "-p") == 0 && i + 1 < argc) {
+        if (strcmp(argv[i], "-p") == 0 && i + 1 < argc) {
             port = atoi(argv[++i]);
-        } else if (strcmp(argv[i], "-f") == 0 && i + 1 < argc) {
-            filter = argv[++i];
         } else if (strcmp(argv[i], "-l") == 0) {
             platform_init();
             list_devices();
@@ -124,51 +108,16 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Open capture if interface specified
-    if (interface) {
-        g_capture = capture_open(interface, 65535, 1, 1000, errbuf);
-        if (!g_capture) {
-            fprintf(stderr, "Error: Failed to open interface '%s': %s\n", interface, errbuf);
-            buffer_destroy(g_buffer);
-            platform_cleanup();
-            return 1;
-        }
-
-        if (filter) {
-            if (capture_set_filter(g_capture, filter, errbuf) != 0) {
-                fprintf(stderr, "Warning: Failed to set filter: %s\n", errbuf);
-            }
-        }
-
-        if (capture_start(g_capture, packet_callback, g_buffer) != 0) {
-            fprintf(stderr, "Error: Failed to start capture\n");
-            capture_close(g_capture);
-            buffer_destroy(g_buffer);
-            platform_cleanup();
-            return 1;
-        }
-
-        printf("Capturing on interface: %s\n", interface);
-        if (filter) {
-            printf("Filter: %s\n", filter);
-        }
-    } else {
-        printf("No interface specified. Use -i to select an interface.\n");
-        printf("Use -l to list available interfaces.\n\n");
-    }
-
     // Create and start web server
     server_config_t config = {
         .port = port,
         .static_dir = STATIC_DIR,
-        .packet_buffer = g_buffer,
-        .capture = g_capture
+        .packet_buffer = g_buffer
     };
 
     g_server = server_create(&config);
     if (!g_server) {
         fprintf(stderr, "Error: Failed to create server\n");
-        if (g_capture) capture_close(g_capture);
         buffer_destroy(g_buffer);
         platform_cleanup();
         return 1;
@@ -177,13 +126,13 @@ int main(int argc, char *argv[]) {
     if (server_start(g_server) != 0) {
         fprintf(stderr, "Error: Failed to start server on port %d\n", port);
         server_destroy(g_server);
-        if (g_capture) capture_close(g_capture);
         buffer_destroy(g_buffer);
         platform_cleanup();
         return 1;
     }
 
     printf("\nOpen http://localhost:%d in your browser\n", port);
+    printf("Select interface and click Start to begin capturing.\n");
     printf("Press Ctrl+C to stop\n\n");
 
     // Main loop
@@ -196,12 +145,6 @@ int main(int argc, char *argv[]) {
 
     server_stop(g_server);
     server_destroy(g_server);
-
-    if (g_capture) {
-        capture_stop(g_capture);
-        capture_close(g_capture);
-    }
-
     buffer_destroy(g_buffer);
     platform_cleanup();
 

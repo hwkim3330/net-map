@@ -13,7 +13,6 @@ typedef struct {
     int port;
     const char *static_dir;
     packet_buffer_t *packet_buffer;
-    capture_handle_t *capture;
 } server_config_t;
 
 // Server handle

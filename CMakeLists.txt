@@ -5,6 +5,9 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Disable mongoose debug logging
+add_definitions(-DMG_ENABLE_LOG=0)
+
 # Output directories
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
@@ -63,6 +66,12 @@ set(LIB_SRC
     lib/cJSON.c
 )
 
+# Windows resource file (icon) - disabled for now
+# if(WIN32)
+#     enable_language(RC)
+#     set(RC_FILE src/resource.rc)
+# endif()
+
 # Main executable
 add_executable(net-map
     src/main.c
@@ -70,7 +79,13 @@ add_executable(net-map
     ${WEB_SRC}
     ${PLATFORM_SRC}
     ${LIB_SRC}
+    ${RC_FILE}
 )
+
+# Static linking on Windows (MinGW)
+if(WIN32 AND CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_link_options(net-map PRIVATE -static -static-libgcc)
+endif()
 
 target_link_libraries(net-map
     ${PCAP_LIB}
