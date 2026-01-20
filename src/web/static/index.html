@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Net-Map - Packet Sniffer</title>
+    <link rel="icon" type="image/png" href="/icon.png">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <img src="/icon.png" alt="Net-Map" class="logo">
+            <h1>Net-Map</h1>
+        </div>
+        <div class="header-center">
+            <select id="device-select" class="device-select">
+                <option value="">Select Interface...</option>
+            </select>
+            <input type="text" id="filter-input" class="filter-input" placeholder="BPF Filter (e.g., tcp port 80)">
+            <button id="start-btn" class="btn btn-start">Start</button>
+            <button id="stop-btn" class="btn btn-stop" disabled>Stop</button>
+            <button id="clear-btn" class="btn btn-clear">Clear</button>
+        </div>
+        <div class="header-right">
+            <div class="stats">
+                <span id="packet-count">0</span> packets
+                <span class="divider">|</span>
+                <span id="byte-count">0</span> bytes
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Packet List -->
+        <div class="packet-list-container">
+            <table class="packet-table" id="packet-table">
+                <thead>
+                    <tr>
+                        <th class="col-no">No.</th>
+                        <th class="col-time">Time</th>
+                        <th class="col-src">Source</th>
+                        <th class="col-dst">Destination</th>
+                        <th class="col-proto">Protocol</th>
+                        <th class="col-len">Length</th>
+                        <th class="col-info">Info</th>
+                    </tr>
+                </thead>
+                <tbody id="packet-tbody">
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Detail Panel -->
+        <div class="detail-panel" id="detail-panel">
+            <div class="detail-header">
+                <span>Packet Details</span>
+                <button class="detail-close" id="detail-close">&times;</button>
+            </div>
+            <div class="detail-content" id="detail-content">
+                <p class="no-selection">Select a packet to view details</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Status Bar -->
+    <footer class="status-bar">
+        <div class="status-left">
+            <span id="status-text">Ready</span>
+        </div>
+        <div class="status-right">
+            <span id="capture-status" class="capture-status stopped">Stopped</span>
+        </div>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>

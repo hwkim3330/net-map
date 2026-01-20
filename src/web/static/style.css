@@ -1,0 +1,360 @@
+/* Net-Map - Wireshark-style Packet Sniffer UI */
+/* Based on tsn-map design: white header + dark content */
+
+:root {
+    --header-bg: #ffffff;
+    --header-border: #e0e0e0;
+    --content-bg: #1e1e1e;
+    --content-bg-alt: #252526;
+    --text-primary: #d4d4d4;
+    --text-secondary: #808080;
+    --text-header: #333333;
+    --accent: #007acc;
+    --accent-hover: #005a9e;
+    --success: #4caf50;
+    --danger: #f44336;
+    --warning: #ff9800;
+
+    /* Protocol colors */
+    --proto-tcp: #e8f5e9;
+    --proto-udp: #e3f2fd;
+    --proto-icmp: #fff3e0;
+    --proto-arp: #fce4ec;
+    --proto-dns: #f3e5f5;
+    --proto-http: #e8f5e9;
+    --proto-https: #e0f7fa;
+    --proto-default: #2d2d2d;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--content-bg);
+    color: var(--text-primary);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Header */
+.header {
+    background: var(--header-bg);
+    border-bottom: 1px solid var(--header-border);
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-shrink: 0;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.logo {
+    width: 32px;
+    height: 32px;
+}
+
+.header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-header);
+}
+
+.header-center {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    justify-content: center;
+}
+
+.device-select {
+    padding: 6px 12px;
+    border: 1px solid var(--header-border);
+    border-radius: 4px;
+    background: white;
+    font-size: 13px;
+    min-width: 200px;
+    color: var(--text-header);
+}
+
+.filter-input {
+    padding: 6px 12px;
+    border: 1px solid var(--header-border);
+    border-radius: 4px;
+    font-size: 13px;
+    width: 250px;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.btn {
+    padding: 6px 16px;
+    border: none;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-start {
+    background: var(--success);
+    color: white;
+}
+
+.btn-start:hover:not(:disabled) {
+    background: #43a047;
+}
+
+.btn-stop {
+    background: var(--danger);
+    color: white;
+}
+
+.btn-stop:hover:not(:disabled) {
+    background: #e53935;
+}
+
+.btn-clear {
+    background: var(--header-border);
+    color: var(--text-header);
+}
+
+.btn-clear:hover {
+    background: #d0d0d0;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+}
+
+.stats {
+    font-size: 13px;
+    color: var(--text-header);
+}
+
+.stats .divider {
+    margin: 0 8px;
+    color: var(--header-border);
+}
+
+/* Main Content */
+.main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Packet List */
+.packet-list-container {
+    flex: 1;
+    overflow: auto;
+}
+
+.packet-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.packet-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.packet-table th {
+    background: var(--content-bg-alt);
+    color: var(--text-primary);
+    padding: 8px 12px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 1px solid #3c3c3c;
+    white-space: nowrap;
+}
+
+.packet-table td {
+    padding: 4px 12px;
+    border-bottom: 1px solid #2d2d2d;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.packet-table tbody tr {
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.packet-table tbody tr:hover {
+    background: #2a2a2a !important;
+}
+
+.packet-table tbody tr.selected {
+    background: var(--accent) !important;
+    color: white;
+}
+
+/* Column widths */
+.col-no { width: 60px; }
+.col-time { width: 120px; }
+.col-src { width: 150px; }
+.col-dst { width: 150px; }
+.col-proto { width: 80px; }
+.col-len { width: 60px; text-align: right; }
+.col-info { width: auto; }
+
+/* Protocol-specific row colors (dark theme) */
+.packet-table tbody tr.proto-tcp { background: #1a2e1a; }
+.packet-table tbody tr.proto-udp { background: #1a2433; }
+.packet-table tbody tr.proto-icmp { background: #332a1a; }
+.packet-table tbody tr.proto-arp { background: #331a2a; }
+.packet-table tbody tr.proto-dns { background: #2a1a33; }
+.packet-table tbody tr.proto-http { background: #1a331a; }
+.packet-table tbody tr.proto-https { background: #1a3333; }
+
+/* Detail Panel */
+.detail-panel {
+    height: 200px;
+    background: var(--content-bg-alt);
+    border-top: 1px solid #3c3c3c;
+    display: none;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+.detail-panel.visible {
+    display: flex;
+}
+
+.detail-header {
+    padding: 8px 12px;
+    background: #333;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.detail-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 4px;
+}
+
+.detail-close:hover {
+    color: var(--text-primary);
+}
+
+.detail-content {
+    flex: 1;
+    padding: 12px;
+    overflow: auto;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 12px;
+}
+
+.detail-content .no-selection {
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.detail-content .detail-row {
+    margin-bottom: 4px;
+}
+
+.detail-content .detail-label {
+    color: var(--accent);
+    margin-right: 8px;
+}
+
+/* Status Bar */
+.status-bar {
+    background: var(--accent);
+    color: white;
+    padding: 4px 16px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.capture-status {
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: 500;
+}
+
+.capture-status.running {
+    background: var(--success);
+}
+
+.capture-status.stopped {
+    background: var(--danger);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--content-bg);
+}
+
+::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #666;
+}
+
+/* Loading state */
+.loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    color: var(--text-secondary);
+}
+
+.loading::before {
+    content: '';
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--text-secondary);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-right: 10px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}

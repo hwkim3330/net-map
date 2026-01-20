@@ -1,0 +1,25 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug (Windows)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/bin/net-map.exe",
+            "args": ["-l"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/src/web",
+            "environment": [],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Debug (Linux/macOS)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/bin/net-map",
+            "args": ["-l"],
+            "cwd": "${workspaceFolder}/src/web",
+            "stopOnEntry": false
+        }
+    ]
+}
