@@ -3,11 +3,13 @@
  */
 
 #include "server.h"
+#include "scanner.h"
 #include "mongoose.h"
 #include "cJSON.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 // Packet callback for capture
 static void packet_callback(const packet_t *pkt, void *user_data);
@@ -21,6 +23,9 @@ struct server {
     capture_handle_t *capture;
     char current_device[256];
     char current_filter[256];
+
+    // Network scanner
+    scanner_t *scanner;
 };
 
 // Forward declarations
@@ -30,6 +35,11 @@ static void handle_api_capture_start(struct mg_connection *c, struct mg_http_mes
 static void handle_api_capture_stop(struct mg_connection *c, struct mg_http_message *hm, server_t *srv);
 static void handle_api_stats(struct mg_connection *c, struct mg_http_message *hm, server_t *srv);
 static void handle_api_clear(struct mg_connection *c, struct mg_http_message *hm, server_t *srv);
+static void handle_api_save_pcap(struct mg_connection *c, struct mg_http_message *hm, server_t *srv);
+static void handle_api_scan_start(struct mg_connection *c, struct mg_http_message *hm, server_t *srv);
+static void handle_api_scan_stop(struct mg_connection *c, struct mg_http_message *hm, server_t *srv);
+static void handle_api_scan_status(struct mg_connection *c, struct mg_http_message *hm, server_t *srv);
+static void handle_api_scan_results(struct mg_connection *c, struct mg_http_message *hm, server_t *srv);
 
 // CORS headers
 static const char *cors_headers =
@@ -93,6 +103,21 @@ static void event_handler(struct mg_connection *c, int ev, void *ev_data) {
         else if (mg_match(hm->uri, mg_str("/api/clear"), NULL)) {
             handle_api_clear(c, hm, srv);
         }
+        else if (mg_match(hm->uri, mg_str("/api/save"), NULL)) {
+            handle_api_save_pcap(c, hm, srv);
+        }
+        else if (mg_match(hm->uri, mg_str("/api/scan/start"), NULL)) {
+            handle_api_scan_start(c, hm, srv);
+        }
+        else if (mg_match(hm->uri, mg_str("/api/scan/stop"), NULL)) {
+            handle_api_scan_stop(c, hm, srv);
+        }
+        else if (mg_match(hm->uri, mg_str("/api/scan/status"), NULL)) {
+            handle_api_scan_status(c, hm, srv);
+        }
+        else if (mg_match(hm->uri, mg_str("/api/scan/results"), NULL)) {
+            handle_api_scan_results(c, hm, srv);
+        }
         else {
             // Serve static files
             struct mg_http_serve_opts opts = {
@@ -115,7 +140,8 @@ static void handle_api_devices(struct mg_connection *c, struct mg_http_message *
         return;
     }
 
-    cJSON *json = cJSON_CreateArray();
+    cJSON *json = cJSON_CreateObject();
+    cJSON *devArray = cJSON_CreateArray();
     for (int i = 0; i < count; i++) {
         cJSON *dev = cJSON_CreateObject();
         cJSON_AddStringToObject(dev, "name", devices[i].name);
@@ -123,8 +149,9 @@ static void handle_api_devices(struct mg_connection *c, struct mg_http_message *
         cJSON_AddStringToObject(dev, "ip", devices[i].ip_addr);
         cJSON_AddBoolToObject(dev, "up", devices[i].is_up);
         cJSON_AddBoolToObject(dev, "loopback", devices[i].is_loopback);
-        cJSON_AddItemToArray(json, dev);
+        cJSON_AddItemToArray(devArray, dev);
     }
+    cJSON_AddItemToObject(json, "devices", devArray);
 
     free_device_list(devices, count);
     send_json(c, 200, json);
@@ -340,6 +367,7 @@ static void handle_api_stats(struct mg_connection *c, struct mg_http_message *hm
     (void)hm;
 
     cJSON *json = cJSON_CreateObject();
+    cJSON_AddBoolToObject(json, "success", true);
 
     bool is_capturing = srv->capture && capture_is_running(srv->capture);
     cJSON_AddBoolToObject(json, "capturing", is_capturing);
@@ -352,10 +380,13 @@ static void handle_api_stats(struct mg_connection *c, struct mg_http_message *hm
             cJSON_AddNumberToObject(json, "bytes_received", (double)stats.bytes_received);
         }
         cJSON_AddStringToObject(json, "device", srv->current_device);
+        cJSON_AddStringToObject(json, "filter", srv->current_filter);
     }
 
     if (srv->config.packet_buffer) {
         cJSON_AddNumberToObject(json, "buffer_count", buffer_count(srv->config.packet_buffer));
+        cJSON_AddNumberToObject(json, "newest_id", (double)buffer_newest_id(srv->config.packet_buffer));
+        cJSON_AddNumberToObject(json, "oldest_id", (double)buffer_oldest_id(srv->config.packet_buffer));
     }
 
     send_json(c, 200, json);
@@ -377,6 +408,334 @@ static void handle_api_clear(struct mg_connection *c, struct mg_http_message *hm
     cJSON_Delete(json);
 }
 
+// API: GET /api/save - Save packets to PCAP format and return as download
+static void handle_api_save_pcap(struct mg_connection *c, struct mg_http_message *hm, server_t *srv) {
+    (void)hm;
+
+    if (!srv->config.packet_buffer) {
+        send_error(c, 500, "Buffer not initialized");
+        return;
+    }
+
+    uint32_t count = buffer_count(srv->config.packet_buffer);
+    if (count == 0) {
+        send_error(c, 400, "No packets to save");
+        return;
+    }
+
+    // Get all packets from buffer
+    uint64_t oldest = buffer_oldest_id(srv->config.packet_buffer);
+    packet_entry_t *entries;
+    int num_packets = buffer_get_range(srv->config.packet_buffer, oldest, count, &entries);
+
+    if (num_packets <= 0 || !entries) {
+        send_error(c, 500, "Failed to get packets");
+        return;
+    }
+
+    // Calculate PCAP file size
+    // PCAP global header: 24 bytes
+    // Each packet: 16 bytes header + packet data
+    size_t pcap_size = 24;
+    for (int i = 0; i < num_packets; i++) {
+        pcap_size += 16 + entries[i].raw.caplen;
+    }
+
+    // Allocate buffer for PCAP data
+    uint8_t *pcap_data = malloc(pcap_size);
+    if (!pcap_data) {
+        buffer_free_entries(entries);
+        send_error(c, 500, "Out of memory");
+        return;
+    }
+
+    uint8_t *ptr = pcap_data;
+
+    // Write PCAP global header
+    // Magic number (microseconds)
+    uint32_t magic = 0xa1b2c3d4;
+    memcpy(ptr, &magic, 4); ptr += 4;
+    // Version major
+    uint16_t ver_major = 2;
+    memcpy(ptr, &ver_major, 2); ptr += 2;
+    // Version minor
+    uint16_t ver_minor = 4;
+    memcpy(ptr, &ver_minor, 2); ptr += 2;
+    // Timezone offset (0)
+    uint32_t thiszone = 0;
+    memcpy(ptr, &thiszone, 4); ptr += 4;
+    // Timestamp accuracy (0)
+    uint32_t sigfigs = 0;
+    memcpy(ptr, &sigfigs, 4); ptr += 4;
+    // Snaplen
+    uint32_t snaplen = 65535;
+    memcpy(ptr, &snaplen, 4); ptr += 4;
+    // Network type (Ethernet)
+    uint32_t network = 1;
+    memcpy(ptr, &network, 4); ptr += 4;
+
+    // Write each packet
+    for (int i = 0; i < num_packets; i++) {
+        packet_t *pkt = &entries[i].raw;
+
+        // Timestamp seconds
+        uint32_t ts_sec = (uint32_t)(pkt->timestamp_us / 1000000);
+        memcpy(ptr, &ts_sec, 4); ptr += 4;
+        // Timestamp microseconds
+        uint32_t ts_usec = (uint32_t)(pkt->timestamp_us % 1000000);
+        memcpy(ptr, &ts_usec, 4); ptr += 4;
+        // Captured length
+        uint32_t caplen = pkt->caplen;
+        memcpy(ptr, &caplen, 4); ptr += 4;
+        // Original length
+        uint32_t origlen = pkt->origlen;
+        memcpy(ptr, &origlen, 4); ptr += 4;
+        // Packet data
+        memcpy(ptr, pkt->data, pkt->caplen);
+        ptr += pkt->caplen;
+    }
+
+    buffer_free_entries(entries);
+
+    // Generate filename with timestamp
+    time_t now = time(NULL);
+    struct tm *tm_info = localtime(&now);
+    char filename[64];
+    strftime(filename, sizeof(filename), "capture_%Y%m%d_%H%M%S.pcap", tm_info);
+
+    // Send response with PCAP file
+    char headers[256];
+    snprintf(headers, sizeof(headers),
+        "Content-Type: application/vnd.tcpdump.pcap\r\n"
+        "Content-Disposition: attachment; filename=\"%s\"\r\n"
+        "Access-Control-Allow-Origin: *\r\n",
+        filename);
+
+    mg_http_reply(c, 200, headers, "");
+    mg_send(c, pcap_data, pcap_size);
+
+    free(pcap_data);
+}
+
+// API: POST /api/scan/start - Start network scan
+static void handle_api_scan_start(struct mg_connection *c, struct mg_http_message *hm, server_t *srv) {
+    // Parse JSON body
+    cJSON *body = cJSON_ParseWithLength(hm->body.buf, hm->body.len);
+    if (!body) {
+        send_error(c, 400, "Invalid JSON");
+        return;
+    }
+
+    // Stop existing scan if running
+    if (srv->scanner && scanner_is_running(srv->scanner)) {
+        scanner_stop(srv->scanner);
+        scanner_destroy(srv->scanner);
+        srv->scanner = NULL;
+    }
+
+    // Get parameters
+    cJSON *target_json = cJSON_GetObjectItem(body, "target");
+    cJSON *type_json = cJSON_GetObjectItem(body, "type");
+    cJSON *interface_json = cJSON_GetObjectItem(body, "interface");
+    cJSON *ports_json = cJSON_GetObjectItem(body, "ports");
+    cJSON *timeout_json = cJSON_GetObjectItem(body, "timeout");
+
+    if (!target_json || !cJSON_IsString(target_json)) {
+        cJSON_Delete(body);
+        send_error(c, 400, "Missing target parameter");
+        return;
+    }
+
+    // Build scan config
+    scan_config_t config = {0};
+    config.target = target_json->valuestring;
+    config.timeout_ms = timeout_json ? timeout_json->valueint : 1000;
+    config.rate_limit = 100;  // 100 packets/sec default
+
+    // Determine scan type
+    if (type_json && cJSON_IsString(type_json)) {
+        const char *type_str = type_json->valuestring;
+        if (strcmp(type_str, "arp") == 0) {
+            config.type = SCAN_TYPE_ARP;
+        } else if (strcmp(type_str, "ping") == 0) {
+            config.type = SCAN_TYPE_PING;
+        } else if (strcmp(type_str, "syn") == 0 || strcmp(type_str, "port") == 0) {
+            config.type = SCAN_TYPE_SYN;
+        } else {
+            config.type = SCAN_TYPE_PING;  // Default
+        }
+    } else {
+        config.type = SCAN_TYPE_PING;
+    }
+
+    // Parse ports if specified
+    uint16_t *custom_ports = NULL;
+    int custom_port_count = 0;
+    if (ports_json && cJSON_IsString(ports_json)) {
+        const char *ports_str = ports_json->valuestring;
+        // Parse comma-separated ports
+        char *ports_copy = strdup(ports_str);
+        char *token = strtok(ports_copy, ",");
+        while (token) {
+            custom_port_count++;
+            token = strtok(NULL, ",");
+        }
+        if (custom_port_count > 0) {
+            custom_ports = malloc(custom_port_count * sizeof(uint16_t));
+            strcpy(ports_copy, ports_str);
+            token = strtok(ports_copy, ",");
+            int i = 0;
+            while (token && i < custom_port_count) {
+                custom_ports[i++] = (uint16_t)atoi(token);
+                token = strtok(NULL, ",");
+            }
+            config.ports = custom_ports;
+            config.port_count = custom_port_count;
+        }
+        free(ports_copy);
+    }
+
+    if (interface_json && cJSON_IsString(interface_json)) {
+        config.iface = interface_json->valuestring;
+    } else {
+        config.iface = srv->current_device;
+    }
+
+    // Create and start scanner
+    srv->scanner = scanner_create(&config);
+    if (!srv->scanner) {
+        if (custom_ports) free(custom_ports);
+        cJSON_Delete(body);
+        send_error(c, 500, "Failed to create scanner");
+        return;
+    }
+
+    if (scanner_start(srv->scanner) != 0) {
+        scanner_destroy(srv->scanner);
+        srv->scanner = NULL;
+        if (custom_ports) free(custom_ports);
+        cJSON_Delete(body);
+        send_error(c, 500, "Failed to start scan");
+        return;
+    }
+
+    if (custom_ports) free(custom_ports);
+    cJSON_Delete(body);
+
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddBoolToObject(json, "success", true);
+    cJSON_AddStringToObject(json, "message", "Scan started");
+    send_json(c, 200, json);
+    cJSON_Delete(json);
+}
+
+// API: POST /api/scan/stop - Stop network scan
+static void handle_api_scan_stop(struct mg_connection *c, struct mg_http_message *hm, server_t *srv) {
+    (void)hm;
+
+    if (srv->scanner) {
+        scanner_stop(srv->scanner);
+    }
+
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddBoolToObject(json, "success", true);
+    cJSON_AddStringToObject(json, "message", "Scan stopped");
+    send_json(c, 200, json);
+    cJSON_Delete(json);
+}
+
+// API: GET /api/scan/status - Get scan status
+static void handle_api_scan_status(struct mg_connection *c, struct mg_http_message *hm, server_t *srv) {
+    (void)hm;
+
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddBoolToObject(json, "success", true);
+
+    if (srv->scanner) {
+        cJSON_AddBoolToObject(json, "running", scanner_is_running(srv->scanner));
+
+        int current, total;
+        scanner_get_progress(srv->scanner, &current, &total);
+        cJSON_AddNumberToObject(json, "current", current);
+        cJSON_AddNumberToObject(json, "total", total);
+
+        if (total > 0) {
+            cJSON_AddNumberToObject(json, "progress", (double)current / total * 100.0);
+        }
+    } else {
+        cJSON_AddBoolToObject(json, "running", false);
+        cJSON_AddNumberToObject(json, "current", 0);
+        cJSON_AddNumberToObject(json, "total", 0);
+    }
+
+    send_json(c, 200, json);
+    cJSON_Delete(json);
+}
+
+// API: GET /api/scan/results - Get scan results
+static void handle_api_scan_results(struct mg_connection *c, struct mg_http_message *hm, server_t *srv) {
+    (void)hm;
+
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddBoolToObject(json, "success", true);
+
+    cJSON *hosts = cJSON_CreateArray();
+
+    if (srv->scanner) {
+        scan_result_t *results;
+        int count = scanner_get_results(srv->scanner, &results);
+
+        for (int i = 0; i < count; i++) {
+            cJSON *host = cJSON_CreateObject();
+            cJSON_AddStringToObject(host, "ip", results[i].ip_str);
+
+            if (results[i].mac_str[0] != '\0') {
+                cJSON_AddStringToObject(host, "mac", results[i].mac_str);
+            }
+
+            cJSON_AddStringToObject(host, "status",
+                results[i].status == HOST_STATUS_UP ? "up" :
+                results[i].status == HOST_STATUS_DOWN ? "down" : "unknown");
+
+            cJSON_AddNumberToObject(host, "rtt_ms", results[i].rtt_us / 1000.0);
+
+            // Add ports if available
+            if (results[i].port_count > 0) {
+                cJSON *ports = cJSON_CreateArray();
+                for (int p = 0; p < results[i].port_count; p++) {
+                    cJSON *port = cJSON_CreateObject();
+                    cJSON_AddNumberToObject(port, "port", results[i].ports[p].port);
+                    cJSON_AddStringToObject(port, "status",
+                        results[i].ports[p].status == PORT_STATUS_OPEN ? "open" :
+                        results[i].ports[p].status == PORT_STATUS_CLOSED ? "closed" : "filtered");
+                    if (results[i].ports[p].service[0] != '\0') {
+                        cJSON_AddStringToObject(port, "service", results[i].ports[p].service);
+                    }
+                    cJSON_AddItemToArray(ports, port);
+                }
+                cJSON_AddItemToObject(host, "ports", ports);
+            }
+
+            cJSON_AddItemToArray(hosts, host);
+        }
+
+        if (results) {
+            scanner_free_results(results, count);
+        }
+
+        cJSON_AddNumberToObject(json, "count", count);
+        cJSON_AddBoolToObject(json, "scanning", scanner_is_running(srv->scanner));
+    } else {
+        cJSON_AddNumberToObject(json, "count", 0);
+        cJSON_AddBoolToObject(json, "scanning", false);
+    }
+
+    cJSON_AddItemToObject(json, "hosts", hosts);
+
+    send_json(c, 200, json);
+    cJSON_Delete(json);
+}
+
 server_t* server_create(const server_config_t *config) {
     server_t *srv = calloc(1, sizeof(server_t));
     if (!srv) return NULL;
@@ -394,6 +753,12 @@ void server_destroy(server_t *srv) {
     if (srv->capture) {
         capture_stop(srv->capture);
         capture_close(srv->capture);
+    }
+
+    // Stop scanner if running
+    if (srv->scanner) {
+        scanner_stop(srv->scanner);
+        scanner_destroy(srv->scanner);
     }
 
     mg_mgr_free(&srv->mgr);

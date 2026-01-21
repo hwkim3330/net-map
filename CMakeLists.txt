@@ -53,6 +53,7 @@ set(CORE_SRC
     src/core/capture.c
     src/core/parser.c
     src/core/buffer.c
+    src/core/scanner.c
 )
 
 set(WEB_SRC

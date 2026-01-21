@@ -3,183 +3,84 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Net-Map</title>
-    <link rel="icon" type="image/png" href="/logo.png">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <title>Net-Map - Network Analyzer</title>
+    <link rel="icon" type="image/png" href="icon.png">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- Sidebar -->
-    <aside class="sidebar">
-        <div class="sidebar-header">
-            <img src="/logo.png" alt="Net-Map" class="logo">
-            <span class="logo-text">Net-Map</span>
-        </div>
-
-        <div class="sidebar-section">
-            <label class="section-label">Interface</label>
-            <select id="device-select" class="select-input">
-                <option value="">Select...</option>
-            </select>
-        </div>
-
-        <div class="sidebar-section">
-            <label class="section-label">Filter (BPF)</label>
-            <input type="text" id="filter-input" class="text-input" placeholder="e.g., tcp port 80">
-        </div>
-
-        <div class="sidebar-section btn-group">
-            <button id="start-btn" class="btn btn-primary">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                    <path d="M8 5v14l11-7z"/>
-                </svg>
-                Start
-            </button>
-            <button id="stop-btn" class="btn btn-danger" disabled>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                    <rect x="6" y="6" width="12" height="12"/>
-                </svg>
-                Stop
-            </button>
-        </div>
-
-        <div class="sidebar-section">
-            <button id="clear-btn" class="btn btn-secondary btn-full">Clear Packets</button>
-        </div>
-
-        <!-- Stats Cards -->
-        <div class="stats-cards">
-            <div class="stat-card">
-                <div class="stat-value" id="packet-count">0</div>
-                <div class="stat-label">Packets</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="byte-count">0 B</div>
-                <div class="stat-label">Total Size</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="pps-count">0</div>
-                <div class="stat-label">Packets/sec</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="bps-count">0 B/s</div>
-                <div class="stat-label">Throughput</div>
-            </div>
-        </div>
-
-        <div class="sidebar-footer">
-            <div class="capture-indicator" id="capture-indicator">
-                <span class="indicator-dot"></span>
-                <span id="capture-status-text">Stopped</span>
-            </div>
-        </div>
-    </aside>
-
-    <!-- Main Content -->
-    <main class="main-content">
-        <!-- Tab Navigation -->
-        <div class="tab-nav">
-            <button class="tab-btn active" data-tab="dashboard">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                    <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
-                </svg>
-                Dashboard
-            </button>
-            <button class="tab-btn" data-tab="packets">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                    <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/>
-                </svg>
-                Packets
-            </button>
-            <button class="tab-btn" data-tab="topology">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
-                </svg>
-                Topology
-            </button>
-        </div>
-
-        <!-- Dashboard Tab -->
-        <div class="tab-content active" id="tab-dashboard">
-            <div class="charts-grid">
-                <!-- Traffic Chart -->
-                <div class="chart-card large">
-                    <div class="chart-header">
-                        <span class="chart-title">Traffic Over Time</span>
-                        <div class="chart-controls">
-                            <select id="chart-interval" class="mini-select">
-                                <option value="100">100ms</option>
-                                <option value="500" selected>500ms</option>
-                                <option value="1000">1s</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="chart-body">
-                        <canvas id="traffic-chart"></canvas>
-                    </div>
-                </div>
-
-                <!-- Protocol Distribution -->
-                <div class="chart-card">
-                    <div class="chart-header">
-                        <span class="chart-title">Protocol Distribution</span>
-                    </div>
-                    <div class="chart-body">
-                        <canvas id="protocol-chart"></canvas>
-                    </div>
-                </div>
-
-                <!-- Top Talkers -->
-                <div class="chart-card">
-                    <div class="chart-header">
-                        <span class="chart-title">Top Sources</span>
-                    </div>
-                    <div class="chart-body">
-                        <canvas id="sources-chart"></canvas>
-                    </div>
-                </div>
-
-                <!-- Packet Size Distribution -->
-                <div class="chart-card">
-                    <div class="chart-header">
-                        <span class="chart-title">Packet Sizes</span>
-                    </div>
-                    <div class="chart-body">
-                        <canvas id="size-chart"></canvas>
-                    </div>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <div class="logo">
+                    <img src="logo.png" alt="Net-Map" onerror="this.style.display='none'">
+                    <span>Net-Map</span>
                 </div>
             </div>
-        </div>
-
-        <!-- Packets Tab -->
-        <div class="tab-content" id="tab-packets">
-            <div class="packet-panel">
-                <div class="panel-header">
-                    <span class="panel-title">Packet List</span>
-                    <div class="panel-actions">
-                        <div class="pagination">
-                            <button class="page-btn" onclick="netmap.firstPage()" title="First">
-                                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M18.41 16.59L13.82 12l4.59-4.59L17 6l-6 6 6 6zM6 6h2v12H6z"/></svg>
-                            </button>
-                            <button class="page-btn" onclick="netmap.prevPage()" title="Previous">
-                                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
-                            </button>
-                            <span id="pagination-info" class="page-info">Page 1 / 1</span>
-                            <button class="page-btn" onclick="netmap.nextPage()" title="Next">
-                                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
-                            </button>
-                            <button class="page-btn" onclick="netmap.lastPage()" title="Last">
-                                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M5.59 7.41L10.18 12l-4.59 4.59L7 18l6-6-6-6zM16 6h2v12h-2z"/></svg>
-                            </button>
-                        </div>
-                        <input type="text" id="search-input" class="search-input" placeholder="Search...">
-                    </div>
+            <div class="header-center">
+                <select id="device-select" class="interface-select">
+                    <option value="">Select Interface...</option>
+                </select>
+                <div class="capture-controls">
+                    <button id="start-btn" class="ctrl-btn start" title="Start Capture">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                            <path d="M8 5v14l11-7z"/>
+                        </svg>
+                    </button>
+                    <button id="stop-btn" class="ctrl-btn stop" disabled title="Stop Capture">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                            <rect x="6" y="6" width="12" height="12"/>
+                        </svg>
+                    </button>
+                    <button id="restart-btn" class="ctrl-btn" title="Restart">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                            <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                        </svg>
+                    </button>
+                    <button id="clear-btn" class="ctrl-btn" title="Clear">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                        </svg>
+                    </button>
                 </div>
-                <div class="packet-table-container">
+                <span id="capture-status" class="capture-status stopped">Stopped</span>
+            </div>
+            <div class="header-right">
+                <div class="header-stats">
+                    <div class="stat"><span class="stat-val" id="stat-packets">0</span><span class="stat-lbl">packets</span></div>
+                    <div class="stat"><span class="stat-val" id="stat-bytes">0 B</span><span class="stat-lbl">size</span></div>
+                    <div class="stat"><span class="stat-val" id="stat-pps">0</span><span class="stat-lbl">pps</span></div>
+                    <div class="stat"><span class="stat-val" id="stat-hosts">0</span><span class="stat-lbl">hosts</span></div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Left Panel - Packet List Only -->
+            <div class="panel panel-left">
+                <div class="filter-bar">
+                    <input type="text" id="filter-input" class="filter-input" placeholder="Display filter (e.g., ip.src == 192.168.1.1, tcp, udp)">
+                    <button id="apply-filter-btn" class="filter-btn" title="Apply Filter">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>
+                    </button>
+                    <button id="clear-filter-btn" class="filter-btn" title="Clear Filter">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                    </button>
+                    <div class="filter-separator"></div>
+                    <button id="export-pcap-btn" class="filter-btn" title="Export as PCAP">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                    </button>
+                    <button id="export-csv-btn" class="filter-btn" title="Export as CSV">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/></svg>
+                    </button>
+                    <button id="coloring-rules-btn" class="filter-btn" title="Coloring Rules">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
+                    </button>
+                </div>
+                <div class="packet-list-container">
                     <table class="packet-table" id="packet-table">
                         <thead>
                             <tr>
@@ -188,46 +89,531 @@
                                 <th class="col-src">Source</th>
                                 <th class="col-dst">Destination</th>
                                 <th class="col-proto">Protocol</th>
-                                <th class="col-len">Length</th>
+                                <th class="col-len">Len</th>
                                 <th class="col-info">Info</th>
                             </tr>
                         </thead>
-                        <tbody id="packet-tbody">
-                        </tbody>
+                        <tbody id="packet-tbody"></tbody>
                     </table>
                 </div>
+                <div class="packet-list-footer">
+                    <div class="pagination">
+                        <button class="page-btn" onclick="netmap.firstPage()">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M18.41 16.59L13.82 12l4.59-4.59L17 6l-6 6 6 6zM6 6h2v12H6z"/></svg>
+                        </button>
+                        <button class="page-btn" onclick="netmap.prevPage()">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+                        </button>
+                        <span id="pagination-info" class="page-info">0 - 0 of 0</span>
+                        <button class="page-btn" onclick="netmap.nextPage()">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+                        </button>
+                        <button class="page-btn" onclick="netmap.lastPage()">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M5.59 7.41L10.18 12l-4.59 4.59L7 18l6-6-6-6zM16 6h2v12h-2z"/></svg>
+                        </button>
+                    </div>
+                    <label class="auto-scroll-label">
+                        <input type="checkbox" id="auto-scroll" checked> Auto-scroll
+                    </label>
+                </div>
             </div>
 
-            <!-- Detail Panel -->
-            <div class="detail-panel" id="detail-panel">
-                <div class="panel-header">
-                    <span class="panel-title">Packet Details</span>
-                    <button class="panel-close" id="detail-close">&times;</button>
+            <!-- Right Panel - All Features -->
+            <div class="panel panel-right">
+                <div class="tabs">
+                    <button class="tab active" data-tab="topology">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M17 16l-4-4V8.82C14.16 8.4 15 7.3 15 6c0-1.66-1.34-3-3-3S9 4.34 9 6c0 1.3.84 2.4 2 2.82V12l-4 4H3v5h5v-3.05l4-4.2 4 4.2V21h5v-5h-4z"/></svg>
+                        Topology
+                    </button>
+                    <button class="tab" data-tab="detail">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 9h-2V9h2v2zm0 4h-2v-2h2v2zm-2-8V3.5L16.5 9H11z"/></svg>
+                        Details
+                    </button>
+                    <button class="tab" data-tab="hex">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
+                        Hex
+                    </button>
+                    <button class="tab" data-tab="protocol">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z"/></svg>
+                        Protocol
+                    </button>
+                    <button class="tab" data-tab="conversations">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M21 6h-2v9H6v2c0 .55.45 1 1 1h11l4 4V7c0-.55-.45-1-1-1zm-4 6V3c0-.55-.45-1-1-1H3c-.55 0-1 .45-1 1v14l4-4h10c.55 0 1-.45 1-1z"/></svg>
+                        Conversations
+                    </button>
+                    <button class="tab" data-tab="endpoints">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+                        Endpoints
+                    </button>
+                    <button class="tab" data-tab="ports">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M20 19.59V8l-6-6H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c.45 0 .85-.15 1.19-.4l-4.43-4.43c-.8.52-1.74.83-2.76.83-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5c0 1.02-.31 1.96-.83 2.75L20 19.59zM9 13c0 1.66 1.34 3 3 3s3-1.34 3-3-1.34-3-3-3-3 1.34-3 3z"/></svg>
+                        Ports
+                    </button>
+                    <button class="tab" data-tab="iograph">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
+                        IO Graph
+                    </button>
+                    <button class="tab" data-tab="scan">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                        Scan
+                    </button>
                 </div>
-                <div class="detail-content" id="detail-content">
-                    <p class="no-selection">Select a packet to view details</p>
-                </div>
-            </div>
-        </div>
 
-        <!-- Topology Tab -->
-        <div class="tab-content" id="tab-topology">
-            <div class="topology-container">
-                <div class="topology-header">
-                    <span class="chart-title">Network Topology</span>
-                    <div class="topology-controls">
-                        <button id="topology-reset" class="btn btn-secondary btn-sm">Reset View</button>
+                <!-- Topology Tab (Default) -->
+                <div class="tab-content active" id="tab-topology">
+                    <div class="topology-container">
+                        <div class="topology-toolbar">
+                            <input type="text" id="topology-search" class="filter-input-small" placeholder="Search IP..." style="width: 120px;">
+                            <button id="topology-center" class="btn-small" title="Center">Center</button>
+                            <button id="topology-cluster" class="btn-small" title="Cluster by Subnet">Cluster</button>
+                            <button id="topology-reset" class="btn-small" title="Reset View">Reset</button>
+                            <select id="topology-layout" class="select-small">
+                                <option value="force">Force Layout</option>
+                                <option value="radial">Radial Layout</option>
+                                <option value="hierarchical">Hierarchical</option>
+                            </select>
+                            <label class="checkbox-small">
+                                <input type="checkbox" id="topology-labels" checked> Labels
+                            </label>
+                            <label class="checkbox-small">
+                                <input type="checkbox" id="topology-animate" checked> Animate
+                            </label>
+                            <span class="topology-hint">Click: filter | Double-click: info | Drag: move</span>
+                        </div>
+                        <div class="topology-main">
+                            <div id="topology-graph" class="topology-graph"></div>
+                            <!-- Host Info Panel (shown on double-click) -->
+                            <div id="topology-info" class="topology-info" style="display: none;">
+                                <div class="info-header">
+                                    <span class="info-title" id="info-ip">192.168.1.1</span>
+                                    <button class="info-close" id="info-close">&times;</button>
+                                </div>
+                                <div class="info-body">
+                                    <div class="info-row"><span class="info-label">Type:</span><span id="info-type">Local</span></div>
+                                    <div class="info-row"><span class="info-label">Packets:</span><span id="info-packets">0</span></div>
+                                    <div class="info-row"><span class="info-label">Bytes:</span><span id="info-bytes">0</span></div>
+                                    <div class="info-row"><span class="info-label">Connections:</span><span id="info-connections">0</span></div>
+                                    <div class="info-row"><span class="info-label">First Seen:</span><span id="info-first">-</span></div>
+                                    <div class="info-row"><span class="info-label">Last Seen:</span><span id="info-last">-</span></div>
+                                    <div class="info-row"><span class="info-label">Protocols:</span><span id="info-protocols">-</span></div>
+                                </div>
+                                <div class="info-actions">
+                                    <button class="btn-small" id="info-filter">Filter Packets</button>
+                                    <button class="btn-small" id="info-highlight">Highlight</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="topology-legend">
+                            <span class="legend-item"><span class="dot local"></span>Local</span>
+                            <span class="legend-item"><span class="dot gateway"></span>Gateway</span>
+                            <span class="legend-item"><span class="dot remote"></span>Remote</span>
+                            <span class="legend-item"><span class="dot broadcast"></span>Broadcast</span>
+                            <span class="topology-stats">
+                                <span id="topo-nodes">0</span> nodes, <span id="topo-links">0</span> links
+                            </span>
+                        </div>
                     </div>
                 </div>
-                <div id="topology-graph" class="topology-graph"></div>
-                <div class="topology-legend">
-                    <div class="legend-item"><span class="legend-dot" style="background: #007AFF"></span> Source</div>
-                    <div class="legend-item"><span class="legend-dot" style="background: #34C759"></span> Destination</div>
-                    <div class="legend-item"><span class="legend-dot" style="background: #FF9500"></span> Both</div>
+
+                <!-- Packet Details Tab -->
+                <div class="tab-content" id="tab-detail">
+                    <div class="detail-panel">
+                        <div class="detail-placeholder" id="detail-placeholder">
+                            <svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor" opacity="0.2">
+                                <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 9h-2V9h2v2zm0 4h-2v-2h2v2zm-2-8V3.5L16.5 9H11z"/>
+                            </svg>
+                            <span>Select a packet to view details</span>
+                        </div>
+                        <div class="detail-content" id="detail-content" style="display: none;"></div>
+                    </div>
+                </div>
+
+                <!-- Hex Dump Tab -->
+                <div class="tab-content" id="tab-hex">
+                    <div class="hex-panel">
+                        <div class="hex-placeholder" id="hex-placeholder">
+                            <svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor" opacity="0.2">
+                                <path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/>
+                            </svg>
+                            <span>Select a packet to view hex dump</span>
+                        </div>
+                        <div class="hex-content" id="hex-content" style="display: none;">
+                            <div class="hex-toolbar">
+                                <button class="btn-small" id="hex-copy">Copy Hex</button>
+                            </div>
+                            <pre class="hex-dump" id="hex-dump"></pre>
+                        </div>
+                    </div>
+                </div>
+
+
+                <!-- Network Scan Tab -->
+                <div class="tab-content" id="tab-scan">
+                    <div class="scan-container">
+                        <!-- Scan Configuration -->
+                        <div class="scan-config">
+                            <div class="scan-row">
+                                <label class="scan-label">Target:</label>
+                                <input type="text" id="scan-target" class="scan-input wide" placeholder="192.168.1.0/24, 10.0.0.1-100, 172.16.0.0/16">
+                                <select id="scan-preset" class="select-small">
+                                    <option value="">Presets...</option>
+                                    <option value="local">/24 Local</option>
+                                    <option value="class-b">/16 Class B</option>
+                                    <option value="class-a">/8 Class A</option>
+                                    <option value="private">All Private</option>
+                                </select>
+                            </div>
+                            <div class="scan-row">
+                                <label class="scan-label">Scan Type:</label>
+                                <select id="scan-type" class="select-small">
+                                    <option value="discovered">Discovered Hosts</option>
+                                    <option value="ping">Ping Scan (-sn)</option>
+                                    <option value="arp">ARP Scan (-PR)</option>
+                                    <option value="syn">SYN Scan (-sS)</option>
+                                    <option value="connect">Connect Scan (-sT)</option>
+                                    <option value="udp">UDP Scan (-sU)</option>
+                                    <option value="comprehensive">Comprehensive (-sS -sV -O)</option>
+                                </select>
+                                <label class="scan-label">Ports:</label>
+                                <select id="scan-port-preset" class="select-small">
+                                    <option value="">Custom...</option>
+                                    <option value="top100">Top 100</option>
+                                    <option value="top1000">Top 1000</option>
+                                    <option value="common">Common (22,80,443...)</option>
+                                    <option value="all">All (1-65535)</option>
+                                </select>
+                                <input type="text" id="scan-ports" class="scan-input" placeholder="22,80,443 or 1-1000">
+                            </div>
+                            <div class="scan-row">
+                                <label class="scan-label">Options:</label>
+                                <label class="checkbox-small"><input type="checkbox" id="scan-os"> OS Detection</label>
+                                <label class="checkbox-small"><input type="checkbox" id="scan-service"> Service Version</label>
+                                <label class="checkbox-small"><input type="checkbox" id="scan-aggressive"> Aggressive</label>
+                                <label class="scan-label">Timing:</label>
+                                <select id="scan-timing" class="select-small">
+                                    <option value="3">Normal (T3)</option>
+                                    <option value="4">Aggressive (T4)</option>
+                                    <option value="5">Insane (T5)</option>
+                                    <option value="2">Polite (T2)</option>
+                                    <option value="1">Sneaky (T1)</option>
+                                </select>
+                                <div class="scan-actions">
+                                    <button id="scan-btn" class="btn-primary">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                                        Start Scan
+                                    </button>
+                                    <button id="scan-stop-btn" class="btn-secondary" disabled>Stop</button>
+                                    <button id="scan-export-btn" class="btn-small">Export</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Scan Progress -->
+                        <div class="scan-progress-panel" id="scan-progress" style="display: none;">
+                            <div class="progress-header">
+                                <span class="progress-title">Scanning...</span>
+                                <span class="progress-stats" id="scan-stats">0/0 hosts</span>
+                            </div>
+                            <div class="progress-bar-container">
+                                <div class="progress-bar"><div class="progress-fill" id="scan-progress-fill"></div></div>
+                                <span class="progress-percent" id="scan-progress-percent">0%</span>
+                            </div>
+                            <div class="progress-details">
+                                <span id="scan-progress-text">Initializing...</span>
+                                <span id="scan-eta">ETA: calculating...</span>
+                            </div>
+                        </div>
+
+                        <!-- Scan Info -->
+                        <div class="scan-info" id="scan-info-text">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                            Select target and scan type, then click Start Scan
+                        </div>
+
+                        <!-- Scan Summary -->
+                        <div class="scan-summary-panel" id="scan-summary" style="display: none;">
+                            <div class="summary-stat">
+                                <span class="summary-value" id="summary-total">0</span>
+                                <span class="summary-label">Total Scanned</span>
+                            </div>
+                            <div class="summary-stat up">
+                                <span class="summary-value" id="summary-up">0</span>
+                                <span class="summary-label">Hosts Up</span>
+                            </div>
+                            <div class="summary-stat down">
+                                <span class="summary-value" id="summary-down">0</span>
+                                <span class="summary-label">Hosts Down</span>
+                            </div>
+                            <div class="summary-stat ports">
+                                <span class="summary-value" id="summary-ports">0</span>
+                                <span class="summary-label">Open Ports</span>
+                            </div>
+                            <div class="summary-stat time">
+                                <span class="summary-value" id="summary-time">0s</span>
+                                <span class="summary-label">Scan Time</span>
+                            </div>
+                        </div>
+
+                        <!-- Results View Toggle -->
+                        <div class="scan-view-toggle" id="scan-view-toggle" style="display: none;">
+                            <button class="view-btn active" data-view="grid">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z"/></svg>
+                                Grid
+                            </button>
+                            <button class="view-btn" data-view="table">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M3 3v18h18V3H3zm8 16H5v-6h6v6zm0-8H5V5h6v6zm8 8h-6v-6h6v6zm0-8h-6V5h6v6z"/></svg>
+                                Table
+                            </button>
+                            <input type="text" id="scan-filter" class="filter-input-small" placeholder="Filter results...">
+                        </div>
+
+                        <!-- Scan Results -->
+                        <div class="scan-results" id="scan-results">
+                            <div id="host-grid" class="host-grid"></div>
+                            <div id="host-table-container" class="host-table-container" style="display: none;">
+                                <table class="data-table clickable" id="host-table">
+                                    <thead>
+                                        <tr>
+                                            <th>IP Address</th>
+                                            <th>Hostname</th>
+                                            <th>Status</th>
+                                            <th>MAC</th>
+                                            <th>RTT</th>
+                                            <th>Open Ports</th>
+                                            <th>OS</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="host-tbody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Protocol Tab -->
+                <div class="tab-content" id="tab-protocol">
+                    <div class="stats-panel">
+                        <div class="stats-split">
+                            <div class="stats-chart-container">
+                                <canvas id="protocol-pie-chart"></canvas>
+                            </div>
+                            <div class="stats-table-side">
+                                <div class="stats-hint">Click row to filter packets by protocol</div>
+                                <div class="stats-table-container">
+                                    <table class="data-table clickable">
+                                        <thead>
+                                            <tr><th>Protocol</th><th>%</th><th>Packets</th><th>Bytes</th><th>Bytes/pkt</th></tr>
+                                        </thead>
+                                        <tbody id="protocol-tbody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Conversations Tab -->
+                <div class="tab-content" id="tab-conversations">
+                    <div class="stats-panel">
+                        <div class="stats-hint">Click row to filter by conversation</div>
+                        <div class="stats-table-container">
+                            <table class="data-table clickable">
+                                <thead>
+                                    <tr><th>Address A</th><th>Port</th><th>Address B</th><th>Port</th><th>Packets</th><th>Bytes</th><th>Duration</th></tr>
+                                </thead>
+                                <tbody id="conv-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Endpoints Tab -->
+                <div class="tab-content" id="tab-endpoints">
+                    <div class="stats-panel">
+                        <div class="stats-chart-top">
+                            <canvas id="endpoints-bar-chart"></canvas>
+                        </div>
+                        <div class="stats-hint">Click row to filter by endpoint</div>
+                        <div class="stats-table-container">
+                            <table class="data-table clickable">
+                                <thead>
+                                    <tr><th>Address</th><th>Packets</th><th>Bytes</th><th>Tx Pkts</th><th>Rx Pkts</th><th>Tx Bytes</th><th>Rx Bytes</th></tr>
+                                </thead>
+                                <tbody id="endpoint-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ports Tab -->
+                <div class="tab-content" id="tab-ports">
+                    <div class="stats-panel">
+                        <div class="stats-chart-top">
+                            <canvas id="ports-bar-chart"></canvas>
+                        </div>
+                        <div class="stats-hint">Click row to filter by port</div>
+                        <div class="stats-table-container">
+                            <table class="data-table clickable">
+                                <thead>
+                                    <tr><th>Port</th><th>Service</th><th>Protocol</th><th>Packets</th><th>Bytes</th><th>Connections</th></tr>
+                                </thead>
+                                <tbody id="ports-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- IO Graph Tab -->
+                <div class="tab-content" id="tab-iograph">
+                    <div class="iograph-panel">
+                        <div class="iograph-toolbar">
+                            <label class="toolbar-label">Interval:</label>
+                            <select id="iograph-interval" class="select-small">
+                                <option value="1">1ms</option>
+                                <option value="10">10ms</option>
+                                <option value="50">50ms</option>
+                                <option value="100" selected>100ms</option>
+                                <option value="500">500ms</option>
+                                <option value="1000">1s</option>
+                                <option value="10000">10s</option>
+                            </select>
+                            <label class="toolbar-label">Y-Axis:</label>
+                            <select id="iograph-yaxis" class="select-small">
+                                <option value="packets">Packets</option>
+                                <option value="bytes">Bytes</option>
+                                <option value="bits">Bits/s</option>
+                            </select>
+                            <label class="toolbar-label">Filter:</label>
+                            <input type="text" id="iograph-filter" class="filter-input-small" placeholder="tcp, udp, ip.addr==...">
+                            <button id="iograph-apply" class="btn-small">Apply</button>
+                            <button id="iograph-clear" class="btn-small">Clear</button>
+                            <label class="checkbox-small">
+                                <input type="checkbox" id="iograph-smooth"> Smooth
+                            </label>
+                        </div>
+                        <div class="iograph-chart">
+                            <canvas id="iograph-canvas"></canvas>
+                        </div>
+                        <div class="iograph-stats">
+                            <span>Max: <strong id="iograph-max">0</strong></span>
+                            <span>Avg: <strong id="iograph-avg">0</strong></span>
+                            <span>Total: <strong id="iograph-total">0</strong></span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-    </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <span id="stat-displayed">0</span> displayed |
+            <span id="stat-duration">00:00:00</span> |
+            <span id="selected-packet-info">Ready</span>
+            <span class="footer-right">
+                <span class="status-dot" id="status-dot"></span>
+                <span id="connection-status">Disconnected</span>
+            </span>
+        </footer>
+    </div>
+
+    <!-- Context Menu for Packets -->
+    <div id="packet-context-menu" class="context-menu" style="display: none;">
+        <div class="context-item" data-action="follow-tcp">Follow TCP Stream</div>
+        <div class="context-item" data-action="follow-udp">Follow UDP Stream</div>
+        <div class="context-separator"></div>
+        <div class="context-item" data-action="filter-conversation">Apply as Filter: Conversation</div>
+        <div class="context-item" data-action="filter-src">Apply as Filter: ip.src == ...</div>
+        <div class="context-item" data-action="filter-dst">Apply as Filter: ip.dst == ...</div>
+        <div class="context-item" data-action="filter-proto">Apply as Filter: Protocol</div>
+        <div class="context-separator"></div>
+        <div class="context-item" data-action="copy-summary">Copy Summary</div>
+        <div class="context-item" data-action="copy-hex">Copy as Hex Dump</div>
+        <div class="context-item" data-action="mark-packet">Mark/Unmark Packet</div>
+    </div>
+
+    <!-- Follow Stream Dialog -->
+    <div id="stream-dialog" class="modal-overlay" style="display: none;">
+        <div class="modal-dialog stream-dialog">
+            <div class="modal-header">
+                <span class="modal-title" id="stream-title">Follow TCP Stream</span>
+                <button class="modal-close" id="stream-close">&times;</button>
+            </div>
+            <div class="modal-toolbar">
+                <select id="stream-format" class="select-small">
+                    <option value="ascii">ASCII</option>
+                    <option value="hex">Hex Dump</option>
+                    <option value="raw">Raw</option>
+                </select>
+                <span class="stream-info" id="stream-info">0 client packets, 0 server packets</span>
+                <button class="btn-small" id="stream-copy">Copy</button>
+                <button class="btn-small" id="stream-save">Save As...</button>
+                <button class="btn-small" id="stream-filter">Filter Out</button>
+            </div>
+            <div class="modal-body">
+                <pre class="stream-content" id="stream-content"></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Coloring Rules Dialog -->
+    <div id="coloring-dialog" class="modal-overlay" style="display: none;">
+        <div class="modal-dialog coloring-dialog">
+            <div class="modal-header">
+                <span class="modal-title">Coloring Rules</span>
+                <button class="modal-close" id="coloring-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="coloring-rules" id="coloring-rules">
+                    <div class="coloring-rule">
+                        <input type="checkbox" checked data-rule="http">
+                        <span class="color-preview" style="background: #fd79a8"></span>
+                        <span class="rule-name">HTTP</span>
+                        <span class="rule-filter">http</span>
+                    </div>
+                    <div class="coloring-rule">
+                        <input type="checkbox" checked data-rule="https">
+                        <span class="color-preview" style="background: #00b894"></span>
+                        <span class="rule-name">HTTPS/TLS</span>
+                        <span class="rule-filter">tls || tcp.port == 443</span>
+                    </div>
+                    <div class="coloring-rule">
+                        <input type="checkbox" checked data-rule="dns">
+                        <span class="color-preview" style="background: #a29bfe"></span>
+                        <span class="rule-name">DNS</span>
+                        <span class="rule-filter">dns</span>
+                    </div>
+                    <div class="coloring-rule">
+                        <input type="checkbox" checked data-rule="tcp-syn">
+                        <span class="color-preview" style="background: #74b9ff"></span>
+                        <span class="rule-name">TCP SYN</span>
+                        <span class="rule-filter">tcp.flags.syn == 1</span>
+                    </div>
+                    <div class="coloring-rule">
+                        <input type="checkbox" checked data-rule="tcp-rst">
+                        <span class="color-preview" style="background: #ff7675"></span>
+                        <span class="rule-name">TCP RST</span>
+                        <span class="rule-filter">tcp.flags.rst == 1</span>
+                    </div>
+                    <div class="coloring-rule">
+                        <input type="checkbox" checked data-rule="icmp">
+                        <span class="color-preview" style="background: #ffeaa7"></span>
+                        <span class="rule-name">ICMP</span>
+                        <span class="rule-filter">icmp</span>
+                    </div>
+                    <div class="coloring-rule">
+                        <input type="checkbox" checked data-rule="arp">
+                        <span class="color-preview" style="background: #dfe6e9"></span>
+                        <span class="rule-name">ARP</span>
+                        <span class="rule-filter">arp</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-small" id="coloring-reset">Reset to Defaults</button>
+                <button class="btn-primary" id="coloring-apply">Apply</button>
+            </div>
+        </div>
+    </div>
 
     <script src="app.js"></script>
 </body>

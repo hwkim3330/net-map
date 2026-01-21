@@ -86,7 +86,10 @@ int buffer_get_range(packet_buffer_t *buf, uint64_t start_id, uint32_t count, pa
     uint64_t oldest_id = buf->entries[buf->head].id;
     uint64_t newest_id = buf->entries[(buf->head + buf->count - 1) % buf->capacity].id;
 
-    if (start_id < oldest_id) start_id = oldest_id;
+    // If start_id is 0 or less than oldest, start from oldest
+    if (start_id == 0 || start_id < oldest_id) start_id = oldest_id;
+
+    // If start_id is beyond newest, return packets newer than start_id
     if (start_id > newest_id) {
         mutex_unlock(&buf->mutex);
         *entries = NULL;
