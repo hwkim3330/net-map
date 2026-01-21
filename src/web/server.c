@@ -40,6 +40,8 @@ static void handle_api_scan_start(struct mg_connection *c, struct mg_http_messag
 static void handle_api_scan_stop(struct mg_connection *c, struct mg_http_message *hm, server_t *srv);
 static void handle_api_scan_status(struct mg_connection *c, struct mg_http_message *hm, server_t *srv);
 static void handle_api_scan_results(struct mg_connection *c, struct mg_http_message *hm, server_t *srv);
+static void handle_api_pcap_load(struct mg_connection *c, struct mg_http_message *hm, server_t *srv);
+static void handle_api_packet_inject(struct mg_connection *c, struct mg_http_message *hm, server_t *srv);
 
 // CORS headers
 static const char *cors_headers =
@@ -117,6 +119,12 @@ static void event_handler(struct mg_connection *c, int ev, void *ev_data) {
         }
         else if (mg_match(hm->uri, mg_str("/api/scan/results"), NULL)) {
             handle_api_scan_results(c, hm, srv);
+        }
+        else if (mg_match(hm->uri, mg_str("/api/pcap/load"), NULL)) {
+            handle_api_pcap_load(c, hm, srv);
+        }
+        else if (mg_match(hm->uri, mg_str("/api/packet/inject"), NULL)) {
+            handle_api_packet_inject(c, hm, srv);
         }
         else {
             // Serve static files
@@ -732,6 +740,249 @@ static void handle_api_scan_results(struct mg_connection *c, struct mg_http_mess
 
     cJSON_AddItemToObject(json, "hosts", hosts);
 
+    send_json(c, 200, json);
+    cJSON_Delete(json);
+}
+
+// API: POST /api/pcap/load - Load PCAP file into buffer
+static void handle_api_pcap_load(struct mg_connection *c, struct mg_http_message *hm, server_t *srv) {
+    if (!srv->config.packet_buffer) {
+        send_error(c, 500, "Buffer not initialized");
+        return;
+    }
+
+    // Check content type for multipart/form-data
+    struct mg_str content_type = mg_http_get_header(hm, "Content-Type");
+    if (!content_type.buf || !mg_strstr(content_type, mg_str("multipart/form-data"))) {
+        send_error(c, 400, "Expected multipart/form-data");
+        return;
+    }
+
+    // Extract file from multipart body
+    struct mg_http_part part;
+    size_t ofs = 0;
+    uint8_t *pcap_data = NULL;
+    size_t pcap_size = 0;
+
+    while ((ofs = mg_http_next_multipart(hm->body, ofs, &part)) > 0) {
+        if (mg_strcmp(part.name, mg_str("file")) == 0) {
+            pcap_data = (uint8_t*)part.body.buf;
+            pcap_size = part.body.len;
+            break;
+        }
+    }
+
+    if (!pcap_data || pcap_size < 24) {
+        send_error(c, 400, "No valid PCAP file uploaded");
+        return;
+    }
+
+    // Parse PCAP file header
+    uint32_t magic;
+    memcpy(&magic, pcap_data, 4);
+
+    bool swap_bytes = false;
+    bool nanosec = false;
+
+    if (magic == 0xa1b2c3d4) {
+        // Standard PCAP, microseconds
+    } else if (magic == 0xd4c3b2a1) {
+        // Swapped byte order
+        swap_bytes = true;
+    } else if (magic == 0xa1b23c4d) {
+        // Nanosecond resolution
+        nanosec = true;
+    } else if (magic == 0x4d3cb2a1) {
+        // Swapped nanosecond
+        swap_bytes = true;
+        nanosec = true;
+    } else {
+        send_error(c, 400, "Invalid PCAP file format");
+        return;
+    }
+
+    // Clear existing buffer
+    buffer_clear(srv->config.packet_buffer);
+
+    // Skip global header (24 bytes)
+    size_t offset = 24;
+    int packet_count = 0;
+
+    while (offset + 16 <= pcap_size) {
+        // Read packet header
+        uint32_t ts_sec, ts_usec, caplen, origlen;
+        memcpy(&ts_sec, pcap_data + offset, 4);
+        memcpy(&ts_usec, pcap_data + offset + 4, 4);
+        memcpy(&caplen, pcap_data + offset + 8, 4);
+        memcpy(&origlen, pcap_data + offset + 12, 4);
+
+        if (swap_bytes) {
+            ts_sec = ((ts_sec >> 24) & 0xff) | ((ts_sec >> 8) & 0xff00) |
+                     ((ts_sec << 8) & 0xff0000) | ((ts_sec << 24) & 0xff000000);
+            ts_usec = ((ts_usec >> 24) & 0xff) | ((ts_usec >> 8) & 0xff00) |
+                      ((ts_usec << 8) & 0xff0000) | ((ts_usec << 24) & 0xff000000);
+            caplen = ((caplen >> 24) & 0xff) | ((caplen >> 8) & 0xff00) |
+                     ((caplen << 8) & 0xff0000) | ((caplen << 24) & 0xff000000);
+            origlen = ((origlen >> 24) & 0xff) | ((origlen >> 8) & 0xff00) |
+                      ((origlen << 8) & 0xff0000) | ((origlen << 24) & 0xff000000);
+        }
+
+        offset += 16;
+
+        // Validate packet data
+        if (offset + caplen > pcap_size || caplen > 65535) {
+            break;
+        }
+
+        // Create packet and add to buffer
+        packet_t pkt;
+        pkt.timestamp_us = (uint64_t)ts_sec * 1000000 + (nanosec ? ts_usec / 1000 : ts_usec);
+        pkt.caplen = caplen;
+        pkt.origlen = origlen;
+        pkt.data = pcap_data + offset;
+
+        buffer_push(srv->config.packet_buffer, &pkt);
+        packet_count++;
+
+        offset += caplen;
+    }
+
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddBoolToObject(json, "success", true);
+    cJSON_AddNumberToObject(json, "packets_loaded", packet_count);
+    cJSON_AddStringToObject(json, "message", "PCAP file loaded successfully");
+    send_json(c, 200, json);
+    cJSON_Delete(json);
+}
+
+// API: POST /api/packet/inject - Inject/send packets to network
+static void handle_api_packet_inject(struct mg_connection *c, struct mg_http_message *hm, server_t *srv) {
+    // Parse JSON body
+    cJSON *body = cJSON_ParseWithLength(hm->body.buf, hm->body.len);
+    if (!body) {
+        send_error(c, 400, "Invalid JSON");
+        return;
+    }
+
+    // Get device to inject on
+    cJSON *device_json = cJSON_GetObjectItem(body, "device");
+    const char *device = device_json && device_json->valuestring ?
+                         device_json->valuestring : srv->current_device;
+
+    if (!device || device[0] == '\0') {
+        cJSON_Delete(body);
+        send_error(c, 400, "No device specified");
+        return;
+    }
+
+    // Get packet data (base64 encoded)
+    cJSON *data_json = cJSON_GetObjectItem(body, "data");
+    cJSON *packets_json = cJSON_GetObjectItem(body, "packets");
+
+    // Get replay mode
+    cJSON *replay_json = cJSON_GetObjectItem(body, "replay");
+    bool replay_mode = replay_json && cJSON_IsTrue(replay_json);
+
+    // Get repeat count
+    cJSON *repeat_json = cJSON_GetObjectItem(body, "repeat");
+    int repeat = (repeat_json && cJSON_IsNumber(repeat_json)) ? repeat_json->valueint : 1;
+    if (repeat < 1) repeat = 1;
+    if (repeat > 1000) repeat = 1000;
+
+    int sent_count = 0;
+    char error_msg[256] = "";
+
+    // Open device for injection
+    pcap_t *handle = NULL;
+    char errbuf[PCAP_ERRBUF_SIZE];
+
+    handle = pcap_open_live(device, 65536, 0, 1000, errbuf);
+    if (!handle) {
+        cJSON_Delete(body);
+        snprintf(error_msg, sizeof(error_msg), "Failed to open device: %s", errbuf);
+        send_error(c, 500, error_msg);
+        return;
+    }
+
+    // Replay packets from buffer
+    if (replay_mode && srv->config.packet_buffer) {
+        uint64_t oldest = buffer_oldest_id(srv->config.packet_buffer);
+        uint32_t count = buffer_count(srv->config.packet_buffer);
+
+        // Get packet IDs to replay
+        cJSON *from_json = cJSON_GetObjectItem(body, "from_id");
+        cJSON *to_json = cJSON_GetObjectItem(body, "to_id");
+        uint64_t from_id = from_json ? (uint64_t)from_json->valuedouble : oldest;
+        uint64_t to_id = to_json ? (uint64_t)to_json->valuedouble : oldest + count - 1;
+
+        packet_entry_t *entries;
+        int num_packets = buffer_get_range(srv->config.packet_buffer, from_id, (uint32_t)(to_id - from_id + 1), &entries);
+
+        if (num_packets > 0 && entries) {
+            for (int r = 0; r < repeat; r++) {
+                for (int i = 0; i < num_packets; i++) {
+                    if (pcap_sendpacket(handle, entries[i].raw.data, entries[i].raw.caplen) == 0) {
+                        sent_count++;
+                    }
+                }
+            }
+            buffer_free_entries(entries);
+        }
+    }
+    // Send single packet (base64 encoded data)
+    else if (data_json && data_json->valuestring) {
+        // Decode base64
+        size_t data_len = strlen(data_json->valuestring);
+        size_t decoded_len = data_len * 3 / 4;
+        uint8_t *decoded = malloc(decoded_len);
+
+        if (decoded) {
+            // Simple base64 decode
+            mg_str b64 = mg_str(data_json->valuestring);
+            int len = mg_base64_decode(b64.buf, b64.len, (char*)decoded, decoded_len);
+
+            if (len > 0) {
+                for (int r = 0; r < repeat; r++) {
+                    if (pcap_sendpacket(handle, decoded, len) == 0) {
+                        sent_count++;
+                    }
+                }
+            }
+            free(decoded);
+        }
+    }
+    // Send multiple packets (array of base64)
+    else if (packets_json && cJSON_IsArray(packets_json)) {
+        cJSON *pkt_item;
+        cJSON_ArrayForEach(pkt_item, packets_json) {
+            if (pkt_item->valuestring) {
+                size_t data_len = strlen(pkt_item->valuestring);
+                size_t decoded_len = data_len * 3 / 4;
+                uint8_t *decoded = malloc(decoded_len);
+
+                if (decoded) {
+                    mg_str b64 = mg_str(pkt_item->valuestring);
+                    int len = mg_base64_decode(b64.buf, b64.len, (char*)decoded, decoded_len);
+
+                    if (len > 0) {
+                        for (int r = 0; r < repeat; r++) {
+                            if (pcap_sendpacket(handle, decoded, len) == 0) {
+                                sent_count++;
+                            }
+                        }
+                    }
+                    free(decoded);
+                }
+            }
+        }
+    }
+
+    pcap_close(handle);
+    cJSON_Delete(body);
+
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddBoolToObject(json, "success", true);
+    cJSON_AddNumberToObject(json, "packets_sent", sent_count);
     send_json(c, 200, json);
     cJSON_Delete(json);
 }

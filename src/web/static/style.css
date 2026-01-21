@@ -1451,6 +1451,51 @@ body {
     background: var(--bg-primary);
 }
 
+/* Sub-tabs for IO Graph panel */
+.sub-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.sub-tab {
+    padding: 6px 12px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.sub-tab:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.sub-tab.active {
+    background: var(--accent-blue);
+    color: white;
+    border-color: var(--accent-blue);
+}
+
+.sub-tab-content {
+    display: none;
+    flex: 1;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+}
+
+.sub-tab-content.active {
+    display: flex;
+}
+
 /* Legacy support for old structure */
 .statistics-container {
     flex: 1;

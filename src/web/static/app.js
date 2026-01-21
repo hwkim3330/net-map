@@ -66,6 +66,7 @@ class NetMap {
         this.initCharts();
         this.initTopology();
         this.initIOGraph();
+        this.initAdvancedCharts();
         this.initEventListeners();
         this.loadDevices();
         this.startRateCalculation();
@@ -151,6 +152,15 @@ class NetMap {
         // Export buttons
         document.getElementById('export-pcap-btn')?.addEventListener('click', () => this.exportPcap());
         document.getElementById('export-csv-btn')?.addEventListener('click', () => this.exportCSV());
+
+        // Load PCAP file
+        document.getElementById('load-pcap-btn')?.addEventListener('click', () => {
+            document.getElementById('pcap-file-input')?.click();
+        });
+        document.getElementById('pcap-file-input')?.addEventListener('change', (e) => this.loadPcapFile(e));
+
+        // Replay packets
+        document.getElementById('replay-btn')?.addEventListener('click', () => this.replayPackets());
 
         // Coloring rules
         document.getElementById('coloring-rules-btn')?.addEventListener('click', () => this.showColoringDialog());
@@ -2914,6 +2924,351 @@ class NetMap {
     }
 
     // ============================================
+    // Advanced Charts (from PacketSniffer)
+    // ============================================
+
+    initAdvancedCharts() {
+        // Sub-tab switching
+        document.querySelectorAll('.sub-tab').forEach(tab => {
+            tab.addEventListener('click', (e) => this.switchSubTab(e.target));
+        });
+
+        // Bandwidth chart
+        this.initBandwidthChart();
+        document.getElementById('bandwidth-refresh')?.addEventListener('click', () => this.updateBandwidthChart());
+        document.getElementById('bandwidth-interval')?.addEventListener('change', () => this.updateBandwidthChart());
+        document.getElementById('bandwidth-unit')?.addEventListener('change', () => this.updateBandwidthChart());
+
+        // Interval distribution chart
+        this.initIntervalChart();
+        document.getElementById('interval-refresh')?.addEventListener('click', () => this.updateIntervalChart());
+        document.getElementById('interval-binsize')?.addEventListener('change', () => this.updateIntervalChart());
+
+        // Length distribution chart
+        this.initLengthChart();
+        document.getElementById('length-refresh')?.addEventListener('click', () => this.updateLengthChart());
+        document.getElementById('length-binsize')?.addEventListener('change', () => this.updateLengthChart());
+    }
+
+    switchSubTab(tabBtn) {
+        const subtabName = tabBtn.dataset.subtab;
+        const panel = tabBtn.closest('.iograph-panel');
+
+        // Update tab buttons
+        panel.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+        tabBtn.classList.add('active');
+
+        // Update tab content
+        panel.querySelectorAll('.sub-tab-content').forEach(c => c.classList.remove('active'));
+        panel.querySelector(`#subtab-${subtabName}`)?.classList.add('active');
+
+        // Refresh chart when switching
+        setTimeout(() => {
+            if (subtabName === 'bandwidth') {
+                this.bandwidthChart?.resize();
+                this.updateBandwidthChart();
+            } else if (subtabName === 'interval') {
+                this.intervalChart?.resize();
+                this.updateIntervalChart();
+            } else if (subtabName === 'length') {
+                this.lengthChart?.resize();
+                this.updateLengthChart();
+            } else if (subtabName === 'io') {
+                this.ioGraphChart?.resize();
+            }
+        }, 50);
+    }
+
+    // Bandwidth Chart (Bytes/sec over time)
+    initBandwidthChart() {
+        const canvas = document.getElementById('bandwidth-canvas');
+        if (!canvas) return;
+
+        this.bandwidthChart = new Chart(canvas.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Bandwidth',
+                    data: [],
+                    borderColor: '#3fb950',
+                    backgroundColor: 'rgba(63, 185, 80, 0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Time (sec)', color: '#8b949e' },
+                        ticks: { color: '#8b949e', maxTicksLimit: 20 },
+                        grid: { color: 'rgba(139, 148, 158, 0.1)' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Bytes/s', color: '#8b949e' },
+                        ticks: { color: '#8b949e' },
+                        grid: { color: 'rgba(139, 148, 158, 0.1)' },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+
+    updateBandwidthChart() {
+        if (!this.bandwidthChart || this.packets.length < 2) return;
+
+        const interval = parseInt(document.getElementById('bandwidth-interval')?.value || 1000);
+        const unit = document.getElementById('bandwidth-unit')?.value || 'bytes';
+
+        // Sort packets by timestamp
+        const sorted = [...this.packets].sort((a, b) => a.timestamp - b.timestamp);
+        const firstTime = sorted[0].timestamp;
+        const lastTime = sorted[sorted.length - 1].timestamp;
+
+        // Create time buckets
+        const buckets = new Map();
+        sorted.forEach(pkt => {
+            const bucket = Math.floor((pkt.timestamp - firstTime) * 1000 / interval);
+            if (!buckets.has(bucket)) {
+                buckets.set(bucket, 0);
+            }
+            buckets.set(bucket, buckets.get(bucket) + pkt.length);
+        });
+
+        // Convert to rate per second
+        const multiplier = 1000 / interval;
+        const labels = [];
+        const data = [];
+        let peak = 0, total = 0;
+
+        const maxBucket = Math.max(...buckets.keys());
+        for (let i = 0; i <= maxBucket; i++) {
+            const bytes = buckets.get(i) || 0;
+            let rate = bytes * multiplier;
+
+            // Convert units
+            let value = rate;
+            if (unit === 'kbytes') value = rate / 1024;
+            else if (unit === 'mbytes') value = rate / (1024 * 1024);
+            else if (unit === 'bits') value = rate * 8;
+            else if (unit === 'kbits') value = (rate * 8) / 1000;
+            else if (unit === 'mbits') value = (rate * 8) / 1000000;
+
+            labels.push((i * interval / 1000).toFixed(1));
+            data.push(value);
+            if (value > peak) peak = value;
+            total += bytes;
+        }
+
+        // Update chart
+        this.bandwidthChart.data.labels = labels;
+        this.bandwidthChart.data.datasets[0].data = data;
+
+        // Update Y axis label
+        const unitLabels = {
+            'bytes': 'Bytes/s', 'kbytes': 'KB/s', 'mbytes': 'MB/s',
+            'bits': 'bits/s', 'kbits': 'Kbps', 'mbits': 'Mbps'
+        };
+        this.bandwidthChart.options.scales.y.title.text = unitLabels[unit];
+        this.bandwidthChart.update();
+
+        // Update stats
+        document.getElementById('bandwidth-peak').textContent = this.formatBandwidth(peak, unit);
+        document.getElementById('bandwidth-avg').textContent = this.formatBandwidth(data.length > 0 ? data.reduce((a,b) => a+b, 0) / data.length : 0, unit);
+        document.getElementById('bandwidth-total').textContent = this.formatBytes(total);
+    }
+
+    formatBandwidth(value, unit) {
+        if (unit.includes('mbits') || unit.includes('mbytes')) return value.toFixed(2);
+        if (unit.includes('kbits') || unit.includes('kbytes')) return value.toFixed(1);
+        return Math.round(value).toLocaleString();
+    }
+
+    // Interval Distribution Chart (packet arrival intervals)
+    initIntervalChart() {
+        const canvas = document.getElementById('interval-canvas');
+        if (!canvas) return;
+
+        this.intervalChart = new Chart(canvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Packets',
+                    data: [],
+                    backgroundColor: 'rgba(88, 166, 255, 0.7)',
+                    borderColor: '#58a6ff',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Interval (ms)', color: '#8b949e' },
+                        ticks: { color: '#8b949e', maxTicksLimit: 30 },
+                        grid: { color: 'rgba(139, 148, 158, 0.1)' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Packets', color: '#8b949e' },
+                        ticks: { color: '#8b949e' },
+                        grid: { color: 'rgba(139, 148, 158, 0.1)' },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+
+    updateIntervalChart() {
+        if (!this.intervalChart || this.packets.length < 2) return;
+
+        const binSize = parseFloat(document.getElementById('interval-binsize')?.value || 1);
+
+        // Sort packets and calculate intervals
+        const sorted = [...this.packets].sort((a, b) => a.timestamp - b.timestamp);
+        const intervals = [];
+        for (let i = 1; i < sorted.length; i++) {
+            const interval = (sorted[i].timestamp - sorted[i-1].timestamp) * 1000; // to ms
+            intervals.push(interval);
+        }
+
+        if (intervals.length === 0) return;
+
+        // Create histogram bins
+        const bins = new Map();
+        intervals.forEach(interval => {
+            const bin = Math.floor(interval / binSize) * binSize;
+            bins.set(bin, (bins.get(bin) || 0) + 1);
+        });
+
+        // Sort and limit to reasonable range (exclude outliers)
+        const sortedBins = Array.from(bins.entries()).sort((a, b) => a[0] - b[0]);
+
+        // Take 95th percentile to exclude extreme outliers
+        const sortedIntervals = [...intervals].sort((a, b) => a - b);
+        const p95 = sortedIntervals[Math.floor(sortedIntervals.length * 0.95)];
+        const filteredBins = sortedBins.filter(([bin]) => bin <= p95 * 1.5);
+
+        const labels = filteredBins.map(([bin]) => bin.toFixed(binSize < 1 ? 3 : 1));
+        const data = filteredBins.map(([, count]) => count);
+
+        this.intervalChart.data.labels = labels;
+        this.intervalChart.data.datasets[0].data = data;
+
+        // Update X axis label based on bin size
+        const unitLabel = binSize < 1 ? 'Interval (μs)' : 'Interval (ms)';
+        this.intervalChart.options.scales.x.title.text = unitLabel;
+        this.intervalChart.update();
+
+        // Calculate stats
+        const min = Math.min(...intervals);
+        const max = Math.max(...intervals);
+        const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+        const variance = intervals.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / intervals.length;
+        const jitter = Math.sqrt(variance);
+
+        document.getElementById('interval-min').textContent = min.toFixed(3) + ' ms';
+        document.getElementById('interval-max').textContent = max.toFixed(3) + ' ms';
+        document.getElementById('interval-avg').textContent = avg.toFixed(3) + ' ms';
+        document.getElementById('interval-jitter').textContent = jitter.toFixed(3) + ' ms';
+    }
+
+    // Length Distribution Chart (packet size distribution)
+    initLengthChart() {
+        const canvas = document.getElementById('length-canvas');
+        if (!canvas) return;
+
+        this.lengthChart = new Chart(canvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Packets',
+                    data: [],
+                    backgroundColor: 'rgba(163, 113, 247, 0.7)',
+                    borderColor: '#a371f7',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Packet Length (bytes)', color: '#8b949e' },
+                        ticks: { color: '#8b949e', maxTicksLimit: 30 },
+                        grid: { color: 'rgba(139, 148, 158, 0.1)' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Packets', color: '#8b949e' },
+                        ticks: { color: '#8b949e' },
+                        grid: { color: 'rgba(139, 148, 158, 0.1)' },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+
+    updateLengthChart() {
+        if (!this.lengthChart || this.packets.length === 0) return;
+
+        const binSize = parseInt(document.getElementById('length-binsize')?.value || 64);
+
+        // Create histogram bins
+        const bins = new Map();
+        let minLen = Infinity, maxLen = 0, totalLen = 0;
+
+        this.packets.forEach(pkt => {
+            const len = pkt.length;
+            const bin = Math.floor(len / binSize) * binSize;
+            bins.set(bin, (bins.get(bin) || 0) + 1);
+
+            if (len < minLen) minLen = len;
+            if (len > maxLen) maxLen = len;
+            totalLen += len;
+        });
+
+        // Sort bins
+        const sortedBins = Array.from(bins.entries()).sort((a, b) => a[0] - b[0]);
+        const labels = sortedBins.map(([bin]) => `${bin}-${bin + binSize - 1}`);
+        const data = sortedBins.map(([, count]) => count);
+
+        this.lengthChart.data.labels = labels;
+        this.lengthChart.data.datasets[0].data = data;
+        this.lengthChart.update();
+
+        // Find mode (most common bin)
+        let modeCount = 0, modeBin = 0;
+        sortedBins.forEach(([bin, count]) => {
+            if (count > modeCount) {
+                modeCount = count;
+                modeBin = bin;
+            }
+        });
+
+        document.getElementById('length-min').textContent = minLen;
+        document.getElementById('length-max').textContent = maxLen;
+        document.getElementById('length-avg').textContent = Math.round(totalLen / this.packets.length);
+        document.getElementById('length-mode').textContent = `${modeBin}-${modeBin + binSize - 1}`;
+    }
+
+    // ============================================
     // Network Scan - Enhanced Nmap-style
     // ============================================
 
@@ -3750,6 +4105,106 @@ class NetMap {
     copySummary(pkt) {
         const summary = `No.${pkt.id} ${new Date(pkt.timestamp * 1000).toISOString()} ${pkt.src} → ${pkt.dst} ${pkt.protocol} ${pkt.length}B ${pkt.info || ''}`;
         navigator.clipboard.writeText(summary);
+    }
+
+    // ==========================================
+    // PCAP File Load (from PacketSniffer)
+    // ==========================================
+    async loadPcapFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        // Show progress
+        this.showProgress(0, 'Loading PCAP...');
+        this.updateStatusInfo(`Loading ${file.name}...`);
+
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const response = await fetch('/api/pcap/load', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || 'Upload failed');
+            }
+
+            const result = await response.json();
+
+            this.hideProgress();
+            this.updateStatusInfo(`Loaded ${result.packets_loaded} packets from ${file.name}`);
+
+            // Refresh packets from server
+            this.packets = [];
+            this.newestId = 0;
+            await this.pollPackets();
+            this.renderPacketTable();
+            this.updateStats();
+            this.updateCharts();
+            this.updateTopology();
+
+        } catch (error) {
+            this.hideProgress();
+            this.updateStatusInfo('Load failed: ' + error.message);
+            alert('Failed to load PCAP: ' + error.message);
+        }
+
+        // Reset file input
+        event.target.value = '';
+    }
+
+    // ==========================================
+    // Packet Replay (from PacketGenerator)
+    // ==========================================
+    async replayPackets() {
+        if (this.packets.length === 0) {
+            alert('No packets to replay');
+            return;
+        }
+
+        const device = this.deviceSelect.value;
+        if (!device) {
+            alert('Please select a network interface first');
+            return;
+        }
+
+        // Confirm replay
+        const count = this.filteredPackets ? this.filteredPackets.length : this.packets.length;
+        if (!confirm(`Replay ${count} packet(s) on ${device}?\n\nThis will inject the packets into the network.`)) {
+            return;
+        }
+
+        this.showProgress(0, 'Replaying...');
+        this.updateStatusInfo('Replaying packets...');
+
+        try {
+            const response = await fetch('/api/packet/inject', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    device: device,
+                    replay: true,
+                    repeat: 1
+                })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || 'Replay failed');
+            }
+
+            const result = await response.json();
+            this.hideProgress();
+            this.updateStatusInfo(`Replayed ${result.packets_sent} packets`);
+
+        } catch (error) {
+            this.hideProgress();
+            this.updateStatusInfo('Replay failed: ' + error.message);
+            alert('Replay failed: ' + error.message);
+        }
     }
 
     // ==========================================
