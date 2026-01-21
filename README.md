@@ -1,64 +1,138 @@
 # Net-Map
 
-**Cross-platform Network Packet Analyzer with Web UI**
+<div align="center">
 
-A lightweight, real-time packet sniffer with a modern Wireshark-style web interface. Built in C with libpcap/Npcap for high-performance packet capture.
+![Net-Map Logo](logo.png)
 
-![Net-Map Screenshot](logo.png)
+**Cross-platform Network Packet Analyzer with Real-time Web UI**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey.svg)]()
+[![Language](https://img.shields.io/badge/Language-C-00599C.svg)]()
+[![UI](https://img.shields.io/badge/UI-Web%20(HTML%2FJS)-orange.svg)]()
+[![libpcap](https://img.shields.io/badge/libpcap-Npcap-green.svg)](https://npcap.com/)
+
+[Features](#features) • [Installation](#installation) • [Usage](#usage) • [Screenshots](#screenshots) • [API](#api-reference)
+
+</div>
+
+---
+
+## Overview
+
+Net-Map is a lightweight, high-performance network packet analyzer built in C. It provides a modern Wireshark-style web interface for real-time packet capture, protocol analysis, and network visualization.
 
 ## Features
 
-### Packet Capture
-- Real-time packet capture using libpcap/Npcap
-- BPF (Berkeley Packet Filter) support
-- Cross-platform: Windows and Linux
+### Packet Capture & Analysis
 
-### Protocol Analysis
-- **Layer 2**: Ethernet, ARP
-- **Layer 3**: IPv4, ICMP
-- **Layer 4**: TCP, UDP
-- **Layer 7**: DNS, HTTP, HTTPS/TLS
+| Feature | Description |
+|---------|-------------|
+| **Real-time Capture** | Live packet capture using libpcap/Npcap with minimal latency |
+| **BPF Filters** | Berkeley Packet Filter support for efficient traffic filtering |
+| **Protocol Parsing** | Deep packet inspection for multiple protocol layers |
+| **Cross-platform** | Native support for Windows (Npcap) and Linux (libpcap) |
 
-### Web UI (Wireshark-style)
-- **Packet List**: Sortable table with protocol coloring
-- **Packet Details**: Expandable tree view for each protocol layer
-- **Hex Dump**: Raw packet data in hex/ASCII view
-- **Live Filtering**: Real-time display filter
+#### Supported Protocols
 
-### Statistics & Visualization
-- **Protocol Distribution**: Pie chart with packet/byte counts
-- **Endpoints**: Traffic statistics per IP address (Tx/Rx)
-- **Ports**: Top ports by packet count with bar chart
-- **Conversations**: Connection tracking between hosts
-- **IO Graph**: Time-series traffic visualization
+| Layer | Protocols |
+|-------|-----------|
+| **Layer 2** | Ethernet, ARP |
+| **Layer 3** | IPv4, ICMP |
+| **Layer 4** | TCP, UDP |
+| **Layer 7** | DNS, HTTP, HTTPS/TLS |
+
+### Web UI Features
+
+#### Packet List View
+- Sortable columns (No, Time, Source, Destination, Protocol, Length, Info)
+- Protocol-based row coloring (TCP=blue, UDP=green, ICMP=yellow, ARP=gray)
+- Real-time packet streaming with auto-scroll
+- Display filter with live filtering
+- Pagination for large captures
+
+#### Packet Details View
+- Expandable tree structure for each protocol layer
+- Wireshark-style layer headers with color coding
+- Syntax highlighting for IP addresses, ports, flags
+- Copy values to clipboard
+
+#### Hex Dump View
+- Traditional hex/ASCII dump display
+- Offset | Hex bytes | ASCII representation
+- Byte highlighting on hover
+
+### Statistics & Charts
+
+| Tab | Visualization | Data |
+|-----|---------------|------|
+| **Protocol** | Pie Chart | Protocol distribution by packets/bytes |
+| **Endpoints** | Bar Chart | Top hosts by Tx/Rx traffic |
+| **Ports** | Bar Chart | Top ports by packet count |
+| **Conversations** | Table | Connection pairs with duration |
+| **IO Graph** | Line Chart | Time-series traffic visualization |
+
+#### IO Graph Options
+- Interval: 1ms, 10ms, 50ms, 100ms, 500ms, 1s, 10s
+- Y-Axis: Packets, Bytes, Bits/s
+- Filter: Protocol-based filtering
+- Smooth: Moving average smoothing
 
 ### Network Topology
-- **D3.js Force Graph**: Visual network map
-- **Node Types**: Local, Gateway, Remote, Broadcast
-- **Interactive**: Drag, zoom, search, highlight
+
+Interactive force-directed graph visualization using D3.js:
+
+| Node Type | Color | Description |
+|-----------|-------|-------------|
+| **Local** | Blue | Devices on local subnet |
+| **Gateway** | Orange | Default gateway/router |
+| **Remote** | Green | External IP addresses |
+| **Broadcast** | Purple | Broadcast/multicast addresses |
+
+Features:
+- Drag nodes to reposition
+- Zoom and pan navigation
+- Search by IP address
+- Click for node details (packets, bytes, first/last seen)
+- Filter packets by selected node
 
 ### Network Scanner
-- **ARP Scan**: Local network host discovery
-- **Ping Scan**: ICMP echo-based detection
-- **TCP SYN Scan**: Port scanning (coming soon)
 
-## Requirements
+| Scan Type | Method | Use Case |
+|-----------|--------|----------|
+| **ARP Scan** | ARP Request/Reply | Local network host discovery |
+| **Ping Scan** | ICMP Echo | Host availability check |
+| **TCP SYN** | Half-open scan | Port scanning (coming soon) |
 
-### Windows
-- [Npcap](https://npcap.com/) - Install with "WinPcap API-compatible Mode" enabled
-- [CMake](https://cmake.org/) 3.10+
-- [Ninja](https://ninja-build.org/) (recommended) or Visual Studio
-- Clang/LLVM or MSVC compiler
+Scanner Features:
+- CIDR notation support (e.g., 192.168.1.0/24)
+- Progress tracking with ETA
+- Results in table or grid view
+- Export discovered hosts
 
-### Linux
+---
+
+## Installation
+
+### Prerequisites
+
+#### Windows
+```
+- Npcap (https://npcap.com/) - Install with "WinPcap API-compatible Mode"
+- CMake 3.10+
+- Ninja (recommended) or Visual Studio
+- Clang/LLVM or MSVC
+```
+
+#### Linux
 ```bash
 sudo apt install libpcap-dev cmake ninja-build build-essential
 ```
 
-## Build
+### Build from Source
 
 ```bash
-# Clone repository
+# Clone
 git clone https://github.com/hwkim3330/net-map.git
 cd net-map
 
@@ -68,118 +142,191 @@ cmake -B build -G Ninja
 # Build
 cmake --build build
 
-# Run (requires admin/root privileges for packet capture)
-./build/bin/net-map -l          # List available interfaces
-./build/bin/net-map -i eth0     # Start capture on eth0
+# Output: build/bin/net-map (or net-map.exe on Windows)
 ```
 
-### Windows (PowerShell as Administrator)
-```powershell
-.\build\bin\net-map.exe -l
-.\build\bin\net-map.exe -i "\Device\NPF_{GUID}"
-```
+---
 
 ## Usage
+
+### Command Line Options
 
 ```
 net-map [options]
 
 Options:
-  -i <interface>  Network interface to capture on
-  -p <port>       Web server port (default: 8080)
-  -f <filter>     BPF filter expression (e.g., "tcp port 80")
-  -l              List available network interfaces
-  -h              Show help message
+  -i <interface>    Network interface to capture on
+  -p <port>         Web server port (default: 8080)
+  -f <filter>       BPF filter expression
+  -l                List available interfaces
+  -h                Show help
 
 Examples:
-  net-map -i eth0                    # Capture all traffic on eth0
-  net-map -i eth0 -f "tcp port 443"  # Capture only HTTPS traffic
-  net-map -i eth0 -p 9090            # Use port 9090 for web UI
+  net-map -l                         # List interfaces
+  net-map -i eth0                    # Capture on eth0
+  net-map -i eth0 -f "tcp port 80"   # HTTP traffic only
+  net-map -i eth0 -p 9090            # Custom web port
 ```
 
-Open **http://localhost:8080** in your browser after starting.
+### Windows
+
+```powershell
+# Run as Administrator
+.\build\bin\net-map.exe -l
+.\build\bin\net-map.exe -i "\Device\NPF_{GUID}"
+```
+
+### Linux
+
+```bash
+# Requires root for packet capture
+sudo ./build/bin/net-map -i eth0
+```
+
+### Access Web UI
+
+Open **http://localhost:8080** in your browser.
+
+---
+
+## Screenshots
+
+### Main Interface
+- Dark theme optimized for long sessions
+- Split-pane layout: packet list + details/hex
+
+### Protocol Statistics
+- Pie chart with protocol breakdown
+- Clickable rows to filter packets
+
+### Network Topology
+- Interactive graph with node details
+- Real-time connection visualization
+
+---
+
+## API Reference
+
+### Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/status` | GET | Capture status, packet count, bytes |
+| `/api/packets` | GET | Fetch packets (supports `since_id`, `limit`) |
+| `/api/interfaces` | GET | List available network interfaces |
+| `/api/filter` | POST | Set BPF capture filter |
+| `/api/control` | POST | Control capture (start/stop/clear) |
+
+### Scanner API
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/scan/start` | POST | Start network scan |
+| `/api/scan/stop` | POST | Stop running scan |
+| `/api/scan/status` | GET | Get scan progress |
+| `/api/scan/results` | GET | Get discovered hosts |
+
+### Example API Calls
+
+```bash
+# Get status
+curl http://localhost:8080/api/status
+
+# Get packets since ID 100
+curl "http://localhost:8080/api/packets?since_id=100&limit=50"
+
+# Set filter
+curl -X POST -d "filter=tcp port 443" http://localhost:8080/api/filter
+
+# Start capture
+curl -X POST -d "action=start" http://localhost:8080/api/control
+
+# Start ARP scan
+curl -X POST -d "type=arp&target=192.168.1.0/24" http://localhost:8080/api/scan/start
+```
+
+---
 
 ## Project Structure
 
 ```
 net-map/
 ├── src/
-│   ├── core/              # Core functionality
-│   │   ├── capture.c      # Packet capture (libpcap wrapper)
-│   │   ├── parser.c       # Protocol parsing
-│   │   ├── buffer.c       # Ring buffer for packets
-│   │   └── scanner.c      # Network scanner
-│   ├── platform/          # Platform-specific code
-│   │   ├── windows.c      # Windows implementation
-│   │   └── linux.c        # Linux implementation
-│   ├── web/               # Web server
-│   │   ├── server.c       # Mongoose HTTP server
-│   │   ├── api.c          # REST API handlers
-│   │   ├── websocket.c    # WebSocket for real-time updates
-│   │   └── static/        # Web UI files
-│   │       ├── index.html # Main HTML
-│   │       ├── app.js     # JavaScript application
-│   │       └── style.css  # Styles
-│   └── main.c             # Entry point
-├── include/               # Header files
-│   ├── capture.h
-│   ├── parser.h
-│   ├── platform.h
-│   └── scanner.h
-├── lib/                   # Third-party libraries
-│   ├── mongoose/          # Embedded web server
-│   └── cJSON/             # JSON library
-└── CMakeLists.txt
+│   ├── core/                 # Core functionality
+│   │   ├── capture.c         # Packet capture (libpcap)
+│   │   ├── parser.c          # Protocol dissection
+│   │   ├── buffer.c          # Ring buffer storage
+│   │   └── scanner.c         # Network scanner
+│   ├── platform/             # OS-specific code
+│   │   ├── windows.c
+│   │   └── linux.c
+│   ├── web/                  # Web server
+│   │   ├── server.c          # Mongoose HTTP server
+│   │   ├── api.c             # REST API handlers
+│   │   ├── websocket.c       # Real-time updates
+│   │   └── static/           # Frontend files
+│   │       ├── index.html
+│   │       ├── app.js
+│   │       └── style.css
+│   └── main.c
+├── include/                  # Headers
+├── lib/                      # Third-party
+│   ├── mongoose/             # Web server
+│   └── cJSON/                # JSON library
+├── CMakeLists.txt
+└── README.md
 ```
 
-## API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/status` | GET | Capture status and statistics |
-| `/api/packets` | GET | Fetch captured packets |
-| `/api/interfaces` | GET | List network interfaces |
-| `/api/filter` | POST | Set BPF capture filter |
-| `/api/control` | POST | Start/stop/clear capture |
-| `/api/scan/start` | POST | Start network scan |
-| `/api/scan/status` | GET | Get scan progress |
-| `/api/scan/results` | GET | Get scan results |
+---
 
 ## Dependencies
 
-- [libpcap](https://www.tcpdump.org/) / [Npcap](https://npcap.com/) - Packet capture library
-- [Mongoose](https://mongoose.ws/) - Embedded web server (MIT License)
-- [cJSON](https://github.com/DaveGamble/cJSON) - JSON parser (MIT License)
-- [D3.js](https://d3js.org/) - Network topology visualization (ISC License)
-- [Chart.js](https://www.chartjs.org/) - Statistics charts (MIT License)
+| Library | Purpose | License |
+|---------|---------|---------|
+| [libpcap](https://www.tcpdump.org/) / [Npcap](https://npcap.com/) | Packet capture | BSD / Npcap License |
+| [Mongoose](https://mongoose.ws/) | Embedded web server | MIT |
+| [cJSON](https://github.com/DaveGamble/cJSON) | JSON parsing | MIT |
+| [D3.js](https://d3js.org/) | Topology visualization | ISC |
+| [Chart.js](https://www.chartjs.org/) | Statistics charts | MIT |
 
-## Screenshots
+---
 
-### Packet Capture
-Real-time packet list with protocol coloring and filtering.
+## Keyboard Shortcuts
 
-### Protocol Statistics
-Pie chart showing protocol distribution with detailed table.
+| Key | Action |
+|-----|--------|
+| `Ctrl+F` | Focus filter input |
+| `Escape` | Clear selection / Close modal |
+| `Up/Down` | Navigate packet list |
+| `Enter` | Show packet details |
+| `C` | Copy selected value |
 
-### Network Topology
-Interactive force-directed graph showing network connections.
+---
 
 ## Contributing
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
+2. Create a feature branch (`git checkout -b feature/new-feature`)
+3. Commit your changes (`git commit -m 'Add new feature'`)
+4. Push to the branch (`git push origin feature/new-feature`)
 5. Open a Pull Request
-
-## License
-
-MIT License - See [LICENSE](LICENSE) file for details.
-
-## Author
-
-**hwkim3330**
 
 ---
 
-*Built with C, libpcap, and modern web technologies.*
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## Author
+
+**hwkim3330** - [GitHub](https://github.com/hwkim3330)
+
+---
+
+<div align="center">
+
+*Built with C, libpcap, and modern web technologies*
+
+</div>
