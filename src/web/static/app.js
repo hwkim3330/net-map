@@ -46,6 +46,14 @@ class NetMap {
         this.ioGraphData = [];
         this.ioGraphInterval = 500;
 
+        // Performance optimization - batch updates
+        this.pendingPackets = [];
+        this.renderScheduled = false;
+        this.lastChartUpdate = 0;
+        this.chartUpdateInterval = 500; // Update charts every 500ms max
+        this.lastTableRender = 0;
+        this.tableRenderInterval = 100; // Render table every 100ms max
+
         this.init();
     }
 
@@ -901,8 +909,13 @@ class NetMap {
     startPolling() {
         if (this.pollInterval) return; // Already polling
         this.pollErrors = 0;
-        this.pollInterval = setInterval(() => this.pollPackets(), 200);
+
+        // Network polling - fetch new packets from server
+        this.pollInterval = setInterval(() => this.pollPackets(), 100);
         this.pollPackets(); // Immediate first poll
+
+        // UI update timer - process buffered packets and update display (like PacketSniffer's CaptureTimer)
+        this.uiUpdateInterval = setInterval(() => this.processPacketBuffer(), 50);
     }
 
     stopPolling() {
@@ -910,15 +923,35 @@ class NetMap {
             clearInterval(this.pollInterval);
             this.pollInterval = null;
         }
+        if (this.uiUpdateInterval) {
+            clearInterval(this.uiUpdateInterval);
+            this.uiUpdateInterval = null;
+        }
+        // Process any remaining packets in buffer
+        this.processPacketBuffer();
+    }
+
+    // Process pending packets from buffer (like PacketSniffer's CaptureTimer_Tick)
+    processPacketBuffer() {
+        if (this.pendingPackets.length === 0) return;
+
+        // Move packets from buffer (atomic-like operation)
+        const packetsToProcess = this.pendingPackets.splice(0, this.pendingPackets.length);
+
+        // Process each packet (data only, no rendering)
+        packetsToProcess.forEach(pkt => this.addPacketData(pkt));
+
+        // Schedule single UI update for all processed packets
+        this.scheduleRender();
     }
 
     async pollPackets() {
         if (!this.capturing) return;
 
         try {
-            // Request packets after newestId (not including newestId itself, unless it's 0)
+            // Request all new packets since newestId (no limit - get whatever arrived)
             const fromId = this.newestId > 0 ? this.newestId + 1 : 0;
-            const response = await fetch(`/api/packets?from=${fromId}&limit=500`);
+            const response = await fetch(`/api/packets?from=${fromId}`);
 
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
@@ -928,17 +961,15 @@ class NetMap {
             this.pollErrors = 0; // Reset on success
 
             if (data.packets && Array.isArray(data.packets) && data.packets.length > 0) {
-                // Process packets
-                data.packets.forEach(pkt => {
-                    // Ensure we don't add duplicates
-                    if (pkt.id > this.newestId) {
-                        this.addPacket(pkt);
-                    }
-                });
+                // Filter duplicates and add to buffer (like PacketSniffer pattern)
+                const newPackets = data.packets.filter(pkt => pkt.id > this.newestId);
 
-                // Update to the highest ID we've seen
-                const lastPkt = data.packets[data.packets.length - 1];
-                if (lastPkt && lastPkt.id > this.newestId) {
+                if (newPackets.length > 0) {
+                    // Add to pending buffer (will be processed by UI timer)
+                    this.pendingPackets.push(...newPackets);
+
+                    // Update newestId to highest received
+                    const lastPkt = newPackets[newPackets.length - 1];
                     this.newestId = lastPkt.id;
                 }
             }
@@ -949,15 +980,14 @@ class NetMap {
             if (this.pollErrors >= this.maxPollErrors) {
                 console.warn('Too many poll errors, stopping capture');
                 this.setConnected(false);
-                // Don't stop capture, server might still be running
-                // Just stop polling and let status poll handle reconnection
                 this.stopPolling();
             }
         }
     }
 
-    addPacket(pkt) {
-        // Set startTime from first packet timestamp (in microseconds)
+    // Add packet data without rendering (for batch processing)
+    addPacketData(pkt) {
+        // Set startTime from first packet timestamp
         if (!this.startTime && pkt.timestamp) {
             this.startTime = pkt.timestamp;
         }
@@ -969,7 +999,7 @@ class NetMap {
         const proto = pkt.protocol || 'Unknown';
         this.protocolCounts[proto] = (this.protocolCounts[proto] || 0) + 1;
 
-        // Track source
+        // Track source/destination
         if (pkt.src) {
             this.sourceCounts[pkt.src] = (this.sourceCounts[pkt.src] || 0) + 1;
             this.trackHost(pkt.src, pkt);
@@ -987,21 +1017,53 @@ class NetMap {
         else if (size <= 1024) this.sizeBuckets['513-1024']++;
         else this.sizeBuckets['1025+']++;
 
-        // Update topology
+        // Update topology data (lightweight)
         this.updateTopologyData(pkt);
 
-        // Update IO Graph
+        // Update IO Graph data
         this.updateIOGraphData(pkt);
+    }
 
-        // Update pagination
-        const totalPages = Math.ceil(this.packets.length / this.pageSize);
-        if (this.autoScroll || this.currentPage === totalPages - 1) {
-            this.currentPage = totalPages;
+    // Schedule a batched render using requestAnimationFrame
+    scheduleRender() {
+        if (this.renderScheduled) return;
+        this.renderScheduled = true;
+
+        requestAnimationFrame(() => {
+            this.renderScheduled = false;
+            this.batchedRender();
+        });
+    }
+
+    // Perform batched UI updates
+    batchedRender() {
+        const now = Date.now();
+
+        // Update table (throttled)
+        if (now - this.lastTableRender >= this.tableRenderInterval) {
+            this.lastTableRender = now;
+            const totalPages = Math.ceil(this.packets.length / this.pageSize);
+            if (this.autoScroll || this.currentPage === totalPages - 1) {
+                this.currentPage = totalPages;
+            }
             this.renderPacketTable();
+            this.updatePagination();
         }
-        this.updatePagination();
+
+        // Update stats (always - lightweight)
         this.updateStats();
-        this.updateCharts();
+
+        // Update charts (throttled - expensive)
+        if (now - this.lastChartUpdate >= this.chartUpdateInterval) {
+            this.lastChartUpdate = now;
+            this.updateCharts();
+        }
+    }
+
+    addPacket(pkt) {
+        // Use the optimized data-only add and schedule render
+        this.addPacketData(pkt);
+        this.scheduleRender();
     }
 
     trackHost(ip, pkt) {
@@ -1040,7 +1102,8 @@ class NetMap {
         const end = start + this.pageSize;
         const pagePackets = this.packets.slice(start, end);
 
-        this.packetTbody.innerHTML = '';
+        // Use DocumentFragment for better performance
+        const fragment = document.createDocumentFragment();
 
         pagePackets.forEach(pkt => {
             const proto = pkt.protocol || 'Unknown';
@@ -1062,8 +1125,12 @@ class NetMap {
             `;
 
             row.addEventListener('click', () => this.selectPacket(pkt, row));
-            this.packetTbody.appendChild(row);
+            fragment.appendChild(row);
         });
+
+        // Single DOM update
+        this.packetTbody.innerHTML = '';
+        this.packetTbody.appendChild(fragment);
     }
 
     updatePagination() {
