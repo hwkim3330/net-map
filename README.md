@@ -191,17 +191,13 @@ Open **http://localhost:8080** in your browser.
 
 ## Screenshots
 
-### Main Interface
-- Dark theme optimized for long sessions
-- Split-pane layout: packet list + details/hex
+### Main Interface - Packet Capture
+![Packet Capture](pic/1.png)
+*Real-time packet capture with protocol coloring, filtering, and detailed packet inspection*
 
-### Protocol Statistics
-- Pie chart with protocol breakdown
-- Clickable rows to filter packets
-
-### Network Topology
-- Interactive graph with node details
-- Real-time connection visualization
+### Statistics & Visualization
+![Statistics](pic/2.png)
+*Protocol distribution charts, endpoint analysis, and network topology visualization*
 
 ---
 
