@@ -54,6 +54,10 @@ class NetMap {
         this.lastTableRender = 0;
         this.tableRenderInterval = 100; // Render table every 100ms max
 
+        // Packet navigation (like PacketSniffer)
+        this.selectedPacketIndex = -1;
+        this.currentZoom = 100;
+
         this.init();
     }
 
@@ -163,15 +167,89 @@ class NetMap {
         // Context menu
         this.initContextMenu();
 
-        // Keyboard shortcuts
+        // Zoom controls
+        document.getElementById('zoom-in-btn')?.addEventListener('click', () => this.zoomIn());
+        document.getElementById('zoom-out-btn')?.addEventListener('click', () => this.zoomOut());
+        document.getElementById('fullscreen-btn')?.addEventListener('click', () => this.toggleFullscreen());
+
+        // Keyboard shortcuts (like PacketSniffer)
         document.addEventListener('keydown', (e) => {
+            // Ctrl+E: Toggle capture
             if (e.ctrlKey && e.key === 'e') {
                 e.preventDefault();
                 this.capturing ? this.stopCapture() : this.startCapture();
             }
+            // Ctrl+S: Save PCAP
             if (e.ctrlKey && e.key === 's') {
                 e.preventDefault();
                 this.savePcap();
+            }
+            // F5: Start capture
+            if (e.key === 'F5' && !e.ctrlKey) {
+                e.preventDefault();
+                if (!this.capturing) this.startCapture();
+            }
+            // F6: Stop capture
+            if (e.key === 'F6') {
+                e.preventDefault();
+                if (this.capturing) this.stopCapture();
+            }
+            // F11: Fullscreen
+            if (e.key === 'F11') {
+                e.preventDefault();
+                this.toggleFullscreen();
+            }
+            // Ctrl++: Zoom in
+            if (e.ctrlKey && (e.key === '+' || e.key === '=')) {
+                e.preventDefault();
+                this.zoomIn();
+            }
+            // Ctrl+-: Zoom out
+            if (e.ctrlKey && e.key === '-') {
+                e.preventDefault();
+                this.zoomOut();
+            }
+            // Ctrl+0: Reset zoom
+            if (e.ctrlKey && e.key === '0') {
+                e.preventDefault();
+                this.resetZoom();
+            }
+            // Ctrl+Up: Previous packet
+            if (e.ctrlKey && e.key === 'ArrowUp') {
+                e.preventDefault();
+                this.selectPreviousPacket();
+            }
+            // Ctrl+Down: Next packet
+            if (e.ctrlKey && e.key === 'ArrowDown') {
+                e.preventDefault();
+                this.selectNextPacket();
+            }
+            // Home: First packet
+            if (e.key === 'Home' && !e.ctrlKey) {
+                e.preventDefault();
+                this.goToFirstPacket();
+            }
+            // End: Last packet
+            if (e.key === 'End' && !e.ctrlKey) {
+                e.preventDefault();
+                this.goToLastPacket();
+            }
+            // Ctrl+Delete: Clear all
+            if (e.ctrlKey && e.key === 'Delete') {
+                e.preventDefault();
+                this.clearPackets();
+            }
+            // Ctrl+F: Focus filter
+            if (e.ctrlKey && e.key === 'f') {
+                e.preventDefault();
+                this.filterInput?.focus();
+                this.filterInput?.select();
+            }
+            // Escape: Clear selection / close dialogs
+            if (e.key === 'Escape') {
+                this.hideStreamDialog?.();
+                this.hideColoringDialog?.();
+                document.getElementById('packet-context-menu')?.style.setProperty('display', 'none');
             }
         });
 
@@ -904,6 +982,9 @@ class NetMap {
 
         this.captureStatus.textContent = this.capturing ? 'Capturing' : 'Stopped';
         this.captureStatus.className = 'capture-status ' + (this.capturing ? 'capturing' : 'stopped');
+
+        // Update footer capture state indicator
+        this.updateCaptureState(this.capturing ? 'Running' : 'Stopped');
     }
 
     startPolling() {
@@ -1661,6 +1742,9 @@ class NetMap {
         this.statPackets.textContent = this.packets.length.toLocaleString();
         this.statBytes.textContent = this.formatBytes(this.totalBytes);
         this.statHosts.textContent = this.hosts.size.toLocaleString();
+
+        // Update footer stats as well
+        this.updateFooterStats();
     }
 
     startRateCalculation() {
@@ -3724,6 +3808,192 @@ class NetMap {
                   .replace(/</g, '&lt;')
                   .replace(/>/g, '&gt;')
                   .replace(/"/g, '&quot;');
+    }
+
+    // ==========================================
+    // Zoom Functions (like PacketSniffer)
+    // ==========================================
+    zoomIn() {
+        if (!this.currentZoom) this.currentZoom = 100;
+        if (this.currentZoom < 200) {
+            this.currentZoom += 10;
+            this.applyZoom();
+        }
+    }
+
+    zoomOut() {
+        if (!this.currentZoom) this.currentZoom = 100;
+        if (this.currentZoom > 50) {
+            this.currentZoom -= 10;
+            this.applyZoom();
+        }
+    }
+
+    resetZoom() {
+        this.currentZoom = 100;
+        this.applyZoom();
+    }
+
+    applyZoom() {
+        const packetTable = document.querySelector('.packet-table');
+        const detailTree = document.querySelector('.detail-tree');
+        const hexDump = document.querySelector('.hex-dump');
+
+        const fontSize = (this.currentZoom / 100) * 12; // base font size 12px
+
+        if (packetTable) {
+            packetTable.style.fontSize = `${fontSize}px`;
+        }
+        if (detailTree) {
+            detailTree.style.fontSize = `${fontSize}px`;
+        }
+        if (hexDump) {
+            hexDump.style.fontSize = `${fontSize}px`;
+        }
+
+        // Update status
+        this.updateStatusInfo(`Zoom: ${this.currentZoom}%`);
+    }
+
+    // ==========================================
+    // Fullscreen Mode (F11)
+    // ==========================================
+    toggleFullscreen() {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(err => {
+                console.log('Fullscreen error:', err);
+            });
+        } else {
+            document.exitFullscreen();
+        }
+    }
+
+    // ==========================================
+    // Packet Navigation (like PacketSniffer)
+    // ==========================================
+    selectPreviousPacket() {
+        if (this.selectedPacketIndex > 0) {
+            this.selectedPacketIndex--;
+            const packets = this.filteredPackets || this.packets;
+            if (packets[this.selectedPacketIndex]) {
+                this.selectPacket(packets[this.selectedPacketIndex]);
+                this.ensurePacketVisible(this.selectedPacketIndex);
+            }
+        }
+    }
+
+    selectNextPacket() {
+        const packets = this.filteredPackets || this.packets;
+        if (this.selectedPacketIndex < packets.length - 1) {
+            this.selectedPacketIndex++;
+            if (packets[this.selectedPacketIndex]) {
+                this.selectPacket(packets[this.selectedPacketIndex]);
+                this.ensurePacketVisible(this.selectedPacketIndex);
+            }
+        }
+    }
+
+    goToFirstPacket() {
+        this.selectedPacketIndex = 0;
+        const packets = this.filteredPackets || this.packets;
+        if (packets.length > 0) {
+            this.selectPacket(packets[0]);
+            this.currentPage = 1;
+            this.renderPacketTable();
+            this.updatePagination();
+        }
+    }
+
+    goToLastPacket() {
+        const packets = this.filteredPackets || this.packets;
+        if (packets.length > 0) {
+            this.selectedPacketIndex = packets.length - 1;
+            this.selectPacket(packets[this.selectedPacketIndex]);
+            this.currentPage = Math.ceil(packets.length / this.pageSize);
+            this.renderPacketTable();
+            this.updatePagination();
+        }
+    }
+
+    ensurePacketVisible(index) {
+        const pageForIndex = Math.floor(index / this.pageSize) + 1;
+        if (pageForIndex !== this.currentPage) {
+            this.currentPage = pageForIndex;
+            this.renderPacketTable();
+            this.updatePagination();
+        }
+        // Scroll to the row within the current page
+        const rowIndex = index % this.pageSize;
+        const row = this.packetTbody?.children[rowIndex];
+        if (row) {
+            row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+    }
+
+    // ==========================================
+    // Progress Bar (like PacketSniffer)
+    // ==========================================
+    showProgress(percent, text = '') {
+        const container = document.getElementById('progress-container');
+        const bar = document.getElementById('progress-bar');
+        const textEl = document.getElementById('progress-text');
+
+        if (container && bar && textEl) {
+            container.style.display = 'flex';
+            bar.style.width = `${percent}%`;
+            textEl.textContent = text || `${percent}%`;
+        }
+    }
+
+    hideProgress() {
+        const container = document.getElementById('progress-container');
+        if (container) {
+            container.style.display = 'none';
+        }
+    }
+
+    // ==========================================
+    // Enhanced Status Bar Updates
+    // ==========================================
+    updateStatusInfo(message) {
+        const infoEl = document.getElementById('selected-packet-info');
+        if (infoEl) {
+            infoEl.textContent = message;
+        }
+    }
+
+    updateCaptureState(state) {
+        const stateEl = document.getElementById('capture-state');
+        const indicator = document.getElementById('capture-indicator');
+
+        if (stateEl) {
+            stateEl.textContent = state;
+        }
+        if (indicator) {
+            indicator.className = 'status-indicator';
+            if (state === 'Running') {
+                indicator.classList.add('running');
+            } else if (state === 'Stopped') {
+                indicator.classList.add('stopped');
+            }
+        }
+    }
+
+    updateFooterStats() {
+        const totalPackets = document.getElementById('stat-total-packets');
+        const totalBytes = document.getElementById('stat-total-bytes');
+        const displayed = document.getElementById('stat-displayed');
+
+        if (totalPackets) {
+            totalPackets.textContent = this.packets.length.toLocaleString();
+        }
+        if (totalBytes) {
+            totalBytes.textContent = this.formatBytes(this.totalBytes);
+        }
+        if (displayed) {
+            const displayCount = this.filteredPackets ? this.filteredPackets.length : this.packets.length;
+            displayed.textContent = displayCount.toLocaleString();
+        }
     }
 }
 

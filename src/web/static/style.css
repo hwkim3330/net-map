@@ -1729,22 +1729,115 @@ body {
 .footer {
     display: flex;
     align-items: center;
-    height: 30px;
-    min-height: 30px;
+    justify-content: space-between;
+    height: 32px;
+    min-height: 32px;
     padding: 0 16px;
     background: var(--bg-tertiary);
     border-top: 1px solid var(--border-color);
     font-size: 11px;
     color: var(--text-muted);
-    gap: 12px;
     flex-shrink: 0;
 }
 
+.footer-left,
+.footer-center,
 .footer-right {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-left: auto;
+}
+
+.footer-left {
+    flex: 1;
+}
+
+.footer-center {
+    flex: 1;
+    justify-content: center;
+}
+
+.footer-right {
+    flex: 1;
+    justify-content: flex-end;
+}
+
+.footer-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.footer-item strong {
+    color: var(--text-primary);
+}
+
+.footer-sep {
+    color: var(--text-muted);
+    opacity: 0.5;
+}
+
+.shortcut-hint {
+    font-size: 10px;
+    opacity: 0.6;
+}
+
+/* Status indicator (capture state) */
+.status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    transition: background 0.2s;
+}
+
+.status-indicator.running {
+    background: var(--accent-green);
+    animation: pulse 1.5s infinite;
+}
+
+.status-indicator.stopped {
+    background: var(--accent-red);
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Progress bar in footer */
+.progress-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 150px;
+}
+
+.progress-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--bg-secondary);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-bar::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: var(--progress, 0%);
+    background: var(--accent-blue);
+    transition: width 0.2s;
+}
+
+.progress-text {
+    font-size: 10px;
+    color: var(--text-secondary);
+    min-width: 30px;
+    text-align: right;
 }
 
 .status-dot {

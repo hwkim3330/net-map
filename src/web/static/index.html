@@ -79,6 +79,16 @@
                     <button id="coloring-rules-btn" class="filter-btn" title="Coloring Rules">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
                     </button>
+                    <div class="filter-separator"></div>
+                    <button id="zoom-in-btn" class="filter-btn" title="Zoom In (Ctrl++)">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zm.5-7H9v2H7v1h2v2h1v-2h2V9h-2z"/></svg>
+                    </button>
+                    <button id="zoom-out-btn" class="filter-btn" title="Zoom Out (Ctrl+-)">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zM7 9h5v1H7z"/></svg>
+                    </button>
+                    <button id="fullscreen-btn" class="filter-btn" title="Fullscreen (F11)">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                    </button>
                 </div>
                 <div class="packet-list-container">
                     <table class="packet-table" id="packet-table">
@@ -504,15 +514,47 @@
             </div>
         </div>
 
-        <!-- Footer -->
+        <!-- Footer / Status Bar -->
         <footer class="footer">
-            <span id="stat-displayed">0</span> displayed |
-            <span id="stat-duration">00:00:00</span> |
-            <span id="selected-packet-info">Ready</span>
-            <span class="footer-right">
+            <div class="footer-left">
+                <span class="footer-item" title="Capture Status">
+                    <span class="status-indicator" id="capture-indicator"></span>
+                    <span id="capture-state">Stopped</span>
+                </span>
+                <span class="footer-sep">|</span>
+                <span class="footer-item" title="Total Packets">
+                    Packets: <strong id="stat-total-packets">0</strong>
+                </span>
+                <span class="footer-sep">|</span>
+                <span class="footer-item" title="Displayed Packets">
+                    Displayed: <strong id="stat-displayed">0</strong>
+                </span>
+                <span class="footer-sep">|</span>
+                <span class="footer-item" title="Total Bytes">
+                    Bytes: <strong id="stat-total-bytes">0</strong>
+                </span>
+                <span class="footer-sep">|</span>
+                <span class="footer-item" title="Capture Duration">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style="vertical-align: middle;"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
+                    <span id="stat-duration">00:00:00</span>
+                </span>
+            </div>
+            <div class="footer-center">
+                <span id="selected-packet-info">Ready</span>
+                <!-- Progress bar for operations -->
+                <div class="progress-container" id="progress-container" style="display: none;">
+                    <div class="progress-bar" id="progress-bar"></div>
+                    <span class="progress-text" id="progress-text">0%</span>
+                </div>
+            </div>
+            <div class="footer-right">
+                <span class="footer-item shortcut-hint" title="Keyboard Shortcuts">
+                    F5: Start | F6: Stop | F11: Fullscreen
+                </span>
+                <span class="footer-sep">|</span>
                 <span class="status-dot" id="status-dot"></span>
                 <span id="connection-status">Disconnected</span>
-            </span>
+            </div>
         </footer>
     </div>
 
