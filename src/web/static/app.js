@@ -193,6 +193,14 @@ class NetMap {
         document.getElementById('settings-apply')?.addEventListener('click', () => this.applySettings());
         document.getElementById('settings-reset')?.addEventListener('click', () => this.resetSettings());
 
+        // Packet Generator
+        document.getElementById('generate-btn')?.addEventListener('click', () => this.showGenerateDialog());
+        document.getElementById('generate-close')?.addEventListener('click', () => this.hideGenerateDialog());
+        document.getElementById('generate-submit')?.addEventListener('click', () => this.generatePackets());
+        document.getElementById('gen-random')?.addEventListener('change', (e) => {
+            document.getElementById('gen-fixed-section').style.display = e.target.checked ? 'none' : 'block';
+        });
+
         // Follow Stream dialog
         document.getElementById('stream-close')?.addEventListener('click', () => this.hideStreamDialog());
         document.getElementById('stream-copy')?.addEventListener('click', () => this.copyStreamContent());
@@ -4303,6 +4311,64 @@ class NetMap {
         document.getElementById('setting-poll-limit').value = 100;
         document.getElementById('setting-page-size').value = 100;
         document.getElementById('setting-table-interval').value = 100;
+    }
+
+    // Packet Generator
+    showGenerateDialog() {
+        const dialog = document.getElementById('generate-dialog');
+        if (dialog) {
+            document.getElementById('gen-status').textContent = '';
+            dialog.style.display = 'flex';
+        }
+    }
+
+    hideGenerateDialog() {
+        const dialog = document.getElementById('generate-dialog');
+        if (dialog) dialog.style.display = 'none';
+    }
+
+    async generatePackets() {
+        const count = parseInt(document.getElementById('gen-count').value) || 100;
+        const protocol = document.getElementById('gen-protocol').value;
+        const payloadSize = parseInt(document.getElementById('gen-payload').value) || 64;
+        const random = document.getElementById('gen-random').checked;
+
+        const params = {
+            count: count,
+            type: protocol,
+            payload_size: payloadSize,
+            random: random
+        };
+
+        if (!random) {
+            params.src_ip = document.getElementById('gen-src-ip').value;
+            params.dst_ip = document.getElementById('gen-dst-ip').value;
+            params.src_port = parseInt(document.getElementById('gen-src-port').value) || 12345;
+            params.dst_port = parseInt(document.getElementById('gen-dst-port').value) || 80;
+        }
+
+        const statusEl = document.getElementById('gen-status');
+        statusEl.textContent = 'Generating...';
+
+        try {
+            const response = await fetch('/api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(params)
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                statusEl.textContent = `Generated ${data.generated} packets`;
+                // Poll immediately to get new packets
+                this.pollPackets();
+                setTimeout(() => this.hideGenerateDialog(), 1000);
+            } else {
+                statusEl.textContent = `Error: ${data.error || 'Failed'}`;
+            }
+        } catch (err) {
+            statusEl.textContent = `Error: ${err.message}`;
+        }
     }
 
     getPacketColorClass(pkt) {

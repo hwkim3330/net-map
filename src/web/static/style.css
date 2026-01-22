@@ -1754,6 +1754,22 @@ body {
     border-color: var(--accent-blue);
 }
 
+.input-small {
+    height: 30px;
+    padding: 0 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 12px;
+    width: 120px;
+}
+
+.input-small:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+}
+
 .checkbox-small {
     display: flex;
     align-items: center;

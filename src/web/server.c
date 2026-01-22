@@ -40,6 +40,7 @@ static void handle_api_scan_start(struct mg_connection *c, struct mg_http_messag
 static void handle_api_scan_stop(struct mg_connection *c, struct mg_http_message *hm, server_t *srv);
 static void handle_api_scan_status(struct mg_connection *c, struct mg_http_message *hm, server_t *srv);
 static void handle_api_scan_results(struct mg_connection *c, struct mg_http_message *hm, server_t *srv);
+static void handle_api_generate(struct mg_connection *c, struct mg_http_message *hm, server_t *srv);
 
 // CORS headers
 static const char *cors_headers =
@@ -117,6 +118,9 @@ static void event_handler(struct mg_connection *c, int ev, void *ev_data) {
         }
         else if (mg_match(hm->uri, mg_str("/api/scan/results"), NULL)) {
             handle_api_scan_results(c, hm, srv);
+        }
+        else if (mg_match(hm->uri, mg_str("/api/generate"), NULL)) {
+            handle_api_generate(c, hm, srv);
         }
         else {
             // Serve static files
@@ -738,6 +742,225 @@ static void handle_api_scan_results(struct mg_connection *c, struct mg_http_mess
 
     cJSON_AddItemToObject(json, "hosts", hosts);
 
+    send_json(c, 200, json);
+    cJSON_Delete(json);
+}
+
+// Generate a fake packet for testing
+static void generate_fake_packet(packet_t *pkt, const char *src_ip, const char *dst_ip,
+                                  uint16_t src_port, uint16_t dst_port,
+                                  const char *protocol, int payload_size) {
+    memset(pkt, 0, sizeof(packet_t));
+
+    // Current timestamp in microseconds
+#ifdef _WIN32
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    uint64_t time100ns = ((uint64_t)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+    // Convert from 100ns intervals since 1601 to microseconds since epoch
+    pkt->timestamp_us = (time100ns - 116444736000000000ULL) / 10;
+#else
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    pkt->timestamp_us = (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+#endif
+
+    uint8_t *data = pkt->data;
+    int offset = 0;
+
+    // Ethernet header (14 bytes)
+    // Destination MAC (random)
+    data[offset++] = 0x00; data[offset++] = 0x11; data[offset++] = 0x22;
+    data[offset++] = 0x33; data[offset++] = 0x44; data[offset++] = 0x55;
+    // Source MAC (random)
+    data[offset++] = 0x66; data[offset++] = 0x77; data[offset++] = 0x88;
+    data[offset++] = 0x99; data[offset++] = 0xAA; data[offset++] = 0xBB;
+    // EtherType: IPv4 (0x0800)
+    data[offset++] = 0x08; data[offset++] = 0x00;
+
+    // IP header (20 bytes)
+    int ip_header_start = offset;
+    data[offset++] = 0x45;  // Version (4) + IHL (5)
+    data[offset++] = 0x00;  // TOS
+
+    // Total length placeholder (fill later)
+    int total_len_offset = offset;
+    offset += 2;
+
+    // ID
+    data[offset++] = (uint8_t)(rand() & 0xFF);
+    data[offset++] = (uint8_t)(rand() & 0xFF);
+    // Flags + Fragment offset
+    data[offset++] = 0x40; data[offset++] = 0x00;  // Don't fragment
+    // TTL
+    data[offset++] = 64;
+
+    // Protocol
+    uint8_t ip_proto;
+    if (strcmp(protocol, "TCP") == 0) ip_proto = 6;
+    else if (strcmp(protocol, "UDP") == 0) ip_proto = 17;
+    else if (strcmp(protocol, "ICMP") == 0) ip_proto = 1;
+    else ip_proto = 6;  // Default TCP
+    data[offset++] = ip_proto;
+
+    // Header checksum placeholder
+    data[offset++] = 0x00; data[offset++] = 0x00;
+
+    // Source IP
+    unsigned int ip_parts[4];
+    sscanf(src_ip, "%u.%u.%u.%u", &ip_parts[0], &ip_parts[1], &ip_parts[2], &ip_parts[3]);
+    data[offset++] = (uint8_t)ip_parts[0];
+    data[offset++] = (uint8_t)ip_parts[1];
+    data[offset++] = (uint8_t)ip_parts[2];
+    data[offset++] = (uint8_t)ip_parts[3];
+
+    // Destination IP
+    sscanf(dst_ip, "%u.%u.%u.%u", &ip_parts[0], &ip_parts[1], &ip_parts[2], &ip_parts[3]);
+    data[offset++] = (uint8_t)ip_parts[0];
+    data[offset++] = (uint8_t)ip_parts[1];
+    data[offset++] = (uint8_t)ip_parts[2];
+    data[offset++] = (uint8_t)ip_parts[3];
+
+    // Transport layer
+    if (ip_proto == 6) {  // TCP
+        // TCP header (20 bytes minimum)
+        data[offset++] = (src_port >> 8) & 0xFF;
+        data[offset++] = src_port & 0xFF;
+        data[offset++] = (dst_port >> 8) & 0xFF;
+        data[offset++] = dst_port & 0xFF;
+        // Sequence number
+        for (int i = 0; i < 4; i++) data[offset++] = (uint8_t)(rand() & 0xFF);
+        // Ack number
+        for (int i = 0; i < 4; i++) data[offset++] = 0;
+        // Data offset (5 words = 20 bytes) + reserved
+        data[offset++] = 0x50;
+        // Flags (SYN)
+        data[offset++] = 0x02;
+        // Window
+        data[offset++] = 0xFF; data[offset++] = 0xFF;
+        // Checksum placeholder
+        data[offset++] = 0x00; data[offset++] = 0x00;
+        // Urgent pointer
+        data[offset++] = 0x00; data[offset++] = 0x00;
+    } else if (ip_proto == 17) {  // UDP
+        // UDP header (8 bytes)
+        data[offset++] = (src_port >> 8) & 0xFF;
+        data[offset++] = src_port & 0xFF;
+        data[offset++] = (dst_port >> 8) & 0xFF;
+        data[offset++] = dst_port & 0xFF;
+        // Length placeholder
+        uint16_t udp_len = 8 + payload_size;
+        data[offset++] = (udp_len >> 8) & 0xFF;
+        data[offset++] = udp_len & 0xFF;
+        // Checksum
+        data[offset++] = 0x00; data[offset++] = 0x00;
+    } else if (ip_proto == 1) {  // ICMP
+        // ICMP Echo Request
+        data[offset++] = 0x08;  // Type: Echo Request
+        data[offset++] = 0x00;  // Code
+        data[offset++] = 0x00; data[offset++] = 0x00;  // Checksum placeholder
+        data[offset++] = 0x00; data[offset++] = 0x01;  // Identifier
+        data[offset++] = 0x00; data[offset++] = 0x01;  // Sequence
+    }
+
+    // Add payload
+    for (int i = 0; i < payload_size && offset < MAX_PACKET_SIZE; i++) {
+        data[offset++] = (uint8_t)(rand() & 0xFF);
+    }
+
+    // Fill in IP total length
+    uint16_t total_len = offset - ip_header_start;
+    data[total_len_offset] = (total_len >> 8) & 0xFF;
+    data[total_len_offset + 1] = total_len & 0xFF;
+
+    pkt->caplen = offset;
+    pkt->origlen = offset;
+}
+
+// API: POST /api/generate - Generate test packets
+static void handle_api_generate(struct mg_connection *c, struct mg_http_message *hm, server_t *srv) {
+    if (!srv->config.packet_buffer) {
+        send_error(c, 500, "Buffer not initialized");
+        return;
+    }
+
+    // Parse JSON body
+    cJSON *body = cJSON_ParseWithLength(hm->body.buf, hm->body.len);
+    if (!body) {
+        send_error(c, 400, "Invalid JSON body");
+        return;
+    }
+
+    // Get parameters
+    cJSON *count_json = cJSON_GetObjectItem(body, "count");
+    cJSON *type_json = cJSON_GetObjectItem(body, "type");
+    cJSON *src_ip_json = cJSON_GetObjectItem(body, "src_ip");
+    cJSON *dst_ip_json = cJSON_GetObjectItem(body, "dst_ip");
+    cJSON *src_port_json = cJSON_GetObjectItem(body, "src_port");
+    cJSON *dst_port_json = cJSON_GetObjectItem(body, "dst_port");
+    cJSON *interval_json = cJSON_GetObjectItem(body, "interval_ms");
+    cJSON *payload_json = cJSON_GetObjectItem(body, "payload_size");
+    cJSON *random_json = cJSON_GetObjectItem(body, "random");
+
+    int count = count_json && cJSON_IsNumber(count_json) ? count_json->valueint : 10;
+    const char *type = type_json && cJSON_IsString(type_json) ? type_json->valuestring : "TCP";
+    const char *base_src_ip = src_ip_json && cJSON_IsString(src_ip_json) ? src_ip_json->valuestring : "192.168.1.100";
+    const char *base_dst_ip = dst_ip_json && cJSON_IsString(dst_ip_json) ? dst_ip_json->valuestring : "192.168.1.1";
+    uint16_t base_src_port = src_port_json && cJSON_IsNumber(src_port_json) ? (uint16_t)src_port_json->valueint : 12345;
+    uint16_t base_dst_port = dst_port_json && cJSON_IsNumber(dst_port_json) ? (uint16_t)dst_port_json->valueint : 80;
+    int interval_ms = interval_json && cJSON_IsNumber(interval_json) ? interval_json->valueint : 0;
+    int payload_size = payload_json && cJSON_IsNumber(payload_json) ? payload_json->valueint : 64;
+    bool random_ips = random_json && cJSON_IsBool(random_json) ? cJSON_IsTrue(random_json) : false;
+
+    // Cap values
+    if (count > 10000) count = 10000;
+    if (count < 1) count = 1;
+    if (payload_size > 1400) payload_size = 1400;
+    if (payload_size < 0) payload_size = 0;
+
+    // Seed random
+    srand((unsigned int)time(NULL));
+
+    // Generate packets
+    int generated = 0;
+    for (int i = 0; i < count; i++) {
+        packet_t pkt;
+        char src_ip[32], dst_ip[32];
+        uint16_t src_port = base_src_port;
+        uint16_t dst_port = base_dst_port;
+
+        if (random_ips) {
+            // Generate random IPs in 10.x.x.x or 192.168.x.x range
+            if (rand() % 2) {
+                snprintf(src_ip, sizeof(src_ip), "10.%d.%d.%d", rand() % 256, rand() % 256, (rand() % 254) + 1);
+                snprintf(dst_ip, sizeof(dst_ip), "10.%d.%d.%d", rand() % 256, rand() % 256, (rand() % 254) + 1);
+            } else {
+                snprintf(src_ip, sizeof(src_ip), "192.168.%d.%d", rand() % 256, (rand() % 254) + 1);
+                snprintf(dst_ip, sizeof(dst_ip), "192.168.%d.%d", rand() % 256, (rand() % 254) + 1);
+            }
+            src_port = (uint16_t)(1024 + rand() % 64000);
+            dst_port = (uint16_t)(rand() % 2 ? 80 : (rand() % 2 ? 443 : (rand() % 2 ? 22 : 8080)));
+        } else {
+            strncpy(src_ip, base_src_ip, sizeof(src_ip) - 1);
+            strncpy(dst_ip, base_dst_ip, sizeof(dst_ip) - 1);
+        }
+
+        generate_fake_packet(&pkt, src_ip, dst_ip, src_port, dst_port, type, payload_size);
+        buffer_push(srv->config.packet_buffer, &pkt);
+        generated++;
+
+        // Small delay between packets if interval specified
+        if (interval_ms > 0 && i < count - 1) {
+            mg_mgr_poll(&srv->mgr, interval_ms);
+        }
+    }
+
+    cJSON_Delete(body);
+
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddBoolToObject(json, "success", true);
+    cJSON_AddNumberToObject(json, "generated", generated);
+    cJSON_AddStringToObject(json, "message", "Packets generated");
     send_json(c, 200, json);
     cJSON_Delete(json);
 }
