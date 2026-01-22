@@ -55,6 +55,11 @@
                     <div class="stat"><span class="stat-val" id="stat-bps">0 B/s</span><span class="stat-lbl">rate</span></div>
                     <div class="stat"><span class="stat-val" id="stat-hosts">0</span><span class="stat-lbl">hosts</span></div>
                 </div>
+                <button id="settings-btn" class="ctrl-btn" title="Settings">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                        <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+                    </svg>
+                </button>
             </div>
         </header>
 
@@ -185,11 +190,11 @@
                             <button id="topology-center" class="btn-small" title="Center">Center</button>
                             <button id="topology-cluster" class="btn-small" title="Cluster by Subnet">Cluster</button>
                             <button id="topology-reset" class="btn-small" title="Reset View">Reset</button>
-                            <select id="topology-layout" class="select-small">
-                                <option value="force">Force Layout</option>
-                                <option value="radial">Radial Layout</option>
-                                <option value="hierarchical">Hierarchical</option>
-                            </select>
+                            <div class="btn-group" id="topology-layout-group">
+                                <button class="btn-toggle active" data-layout="force">Force</button>
+                                <button class="btn-toggle" data-layout="radial">Radial</button>
+                                <button class="btn-toggle" data-layout="hierarchical">Hierarchy</button>
+                            </div>
                             <label class="checkbox-small">
                                 <input type="checkbox" id="topology-labels" checked> Labels
                             </label>
@@ -754,6 +759,68 @@
             <div class="modal-footer">
                 <button class="btn-small" id="coloring-reset">Reset to Defaults</button>
                 <button class="btn-primary" id="coloring-apply">Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Dialog -->
+    <div id="settings-dialog" class="modal-overlay" style="display: none;">
+        <div class="modal-dialog settings-dialog">
+            <div class="modal-header">
+                <span class="modal-title">Settings</span>
+                <button class="modal-close" id="settings-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-section">
+                    <h4 class="settings-title">Packet Polling</h4>
+                    <div class="settings-row">
+                        <label class="settings-label">Poll Interval:</label>
+                        <select id="setting-poll-interval" class="select-small">
+                            <option value="50">50ms (Fast)</option>
+                            <option value="100">100ms</option>
+                            <option value="200">200ms (Default)</option>
+                            <option value="500">500ms</option>
+                            <option value="1000">1s (Slow)</option>
+                        </select>
+                        <span class="settings-hint">Lower = more real-time, higher CPU</span>
+                    </div>
+                    <div class="settings-row">
+                        <label class="settings-label">Max Packets/Poll:</label>
+                        <select id="setting-poll-limit" class="select-small">
+                            <option value="50">50</option>
+                            <option value="100">100 (Default)</option>
+                            <option value="200">200</option>
+                            <option value="500">500</option>
+                            <option value="1000">1000</option>
+                        </select>
+                        <span class="settings-hint">Server returns up to this many per request</span>
+                    </div>
+                </div>
+                <div class="settings-section">
+                    <h4 class="settings-title">Display</h4>
+                    <div class="settings-row">
+                        <label class="settings-label">Page Size:</label>
+                        <select id="setting-page-size" class="select-small">
+                            <option value="50">50</option>
+                            <option value="100">100 (Default)</option>
+                            <option value="200">200</option>
+                            <option value="500">500</option>
+                        </select>
+                    </div>
+                    <div class="settings-row">
+                        <label class="settings-label">Table Update:</label>
+                        <select id="setting-table-interval" class="select-small">
+                            <option value="50">50ms (Smooth)</option>
+                            <option value="100">100ms (Default)</option>
+                            <option value="200">200ms</option>
+                            <option value="500">500ms (Light)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-small" id="settings-reset">Reset to Defaults</button>
+                <button class="btn-primary" id="settings-apply">Apply</button>
             </div>
         </div>
     </div>

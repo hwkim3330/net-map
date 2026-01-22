@@ -58,6 +58,11 @@ class NetMap {
         this.selectedPacketIndex = -1;
         this.currentZoom = 100;
 
+        // Settings (from localStorage)
+        this.topologyLayout = localStorage.getItem('netmap-topology-layout') || 'force';
+        this.packetPollLimit = parseInt(localStorage.getItem('netmap-poll-limit')) || 100;
+        this.pollIntervalMs = parseInt(localStorage.getItem('netmap-poll-interval')) || 200;
+
         this.init();
     }
 
@@ -134,7 +139,20 @@ class NetMap {
         document.getElementById('topology-center')?.addEventListener('click', () => this.centerTopology());
         document.getElementById('topology-cluster')?.addEventListener('click', () => this.clusterTopology());
         document.getElementById('topology-labels')?.addEventListener('change', (e) => this.toggleLabels(e.target.checked));
-        document.getElementById('topology-layout')?.addEventListener('change', (e) => this.changeLayout(e.target.value));
+        // Layout button group
+        document.querySelectorAll('#topology-layout-group .btn-toggle').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const layout = e.target.dataset.layout;
+                this.changeLayout(layout);
+                // Update active state
+                document.querySelectorAll('#topology-layout-group .btn-toggle').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                // Save to localStorage
+                localStorage.setItem('netmap-topology-layout', layout);
+            });
+        });
+        // Restore saved layout on load
+        this.restoreSavedLayout();
         document.getElementById('topology-animate')?.addEventListener('change', (e) => this.toggleAnimation(e.target.checked));
         document.getElementById('topology-physics')?.addEventListener('change', (e) => this.togglePhysics(e.target.checked));
         document.getElementById('topology-search')?.addEventListener('input', (e) => this.searchTopology(e.target.value));
@@ -168,6 +186,12 @@ class NetMap {
         document.getElementById('coloring-close')?.addEventListener('click', () => this.hideColoringDialog());
         document.getElementById('coloring-apply')?.addEventListener('click', () => this.applyColoringRules());
         document.getElementById('coloring-reset')?.addEventListener('click', () => this.resetColoringRules());
+
+        // Settings
+        document.getElementById('settings-btn')?.addEventListener('click', () => this.showSettingsDialog());
+        document.getElementById('settings-close')?.addEventListener('click', () => this.hideSettingsDialog());
+        document.getElementById('settings-apply')?.addEventListener('click', () => this.applySettings());
+        document.getElementById('settings-reset')?.addEventListener('click', () => this.resetSettings());
 
         // Follow Stream dialog
         document.getElementById('stream-close')?.addEventListener('click', () => this.hideStreamDialog());
@@ -260,6 +284,7 @@ class NetMap {
             if (e.key === 'Escape') {
                 this.hideStreamDialog?.();
                 this.hideColoringDialog?.();
+                this.hideSettingsDialog?.();
                 document.getElementById('packet-context-menu')?.style.setProperty('display', 'none');
             }
         });
@@ -968,6 +993,9 @@ class NetMap {
 
             const data = await response.json();
             if (data.success) {
+                // Clear local data for new capture session
+                this.clearLocalData();
+
                 this.capturing = true;
                 this.startTime = Date.now();
                 this.pollErrors = 0;
@@ -1018,8 +1046,8 @@ class NetMap {
         if (this.pollInterval) return; // Already polling
         this.pollErrors = 0;
 
-        // Network polling - fetch new packets from server
-        this.pollInterval = setInterval(() => this.pollPackets(), 100);
+        // Network polling - fetch new packets from server (interval from settings)
+        this.pollInterval = setInterval(() => this.pollPackets(), this.pollIntervalMs);
         this.pollPackets(); // Immediate first poll
 
         // UI update timer - process buffered packets and update display (like PacketSniffer's CaptureTimer)
@@ -1057,9 +1085,9 @@ class NetMap {
         if (!this.capturing) return;
 
         try {
-            // Request all new packets since newestId (no limit - get whatever arrived)
+            // Request all new packets since newestId (no limit)
             const fromId = this.newestId > 0 ? this.newestId + 1 : 0;
-            const response = await fetch(`/api/packets?from=${fromId}`);
+            const response = await fetch(`/api/packets?from=${fromId}&limit=10000`);
 
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
@@ -1102,6 +1130,13 @@ class NetMap {
 
         this.packets.push(pkt);
         this.totalBytes += pkt.length;
+
+        // If filter is active, check if new packet matches and add to filtered list
+        if (this.filteredPackets !== null && this.activeFilterExpr) {
+            if (this.evaluateFilter(pkt, this.activeFilterExpr, this.activeFilterExpr.toLowerCase())) {
+                this.filteredPackets.push(pkt);
+            }
+        }
 
         // Track protocol
         const proto = pkt.protocol || 'Unknown';
@@ -1276,6 +1311,7 @@ class NetMap {
         const filter = this.filterInput?.value?.trim();
         if (!filter) {
             this.filteredPackets = null;
+            this.activeFilterExpr = null;  // Clear active filter
             this.currentPage = 1;
             this.renderPacketTable();
             this.updatePagination();
@@ -1285,6 +1321,9 @@ class NetMap {
         }
 
         const filterLower = filter.toLowerCase();
+
+        // Store active filter for live filtering during capture
+        this.activeFilterExpr = filter;
 
         // Parse complex filters with && and ||
         this.filteredPackets = this.packets.filter(pkt => {
@@ -1296,10 +1335,78 @@ class NetMap {
         this.updatePagination();
         this.updateStats();
 
+        // Update all charts with filtered data
+        this.updateChartsWithFilter();
+
         const infoEl = document.getElementById('selected-packet-info');
         if (infoEl) {
             infoEl.textContent = `Filter: ${filter} (${this.filteredPackets.length} packets)`;
         }
+    }
+
+    updateChartsWithFilter() {
+        // Update charts to reflect filtered packets
+        const packets = this.filteredPackets || this.packets;
+
+        // Update protocol chart
+        this.updateProtocolChartFiltered(packets);
+
+        // Update interval/length distribution
+        this.updateIntervalChart();
+        this.updateLengthChart();
+
+        // Highlight filtered nodes in topology
+        if (this.filteredPackets) {
+            this.highlightFilteredTopology(packets);
+        } else {
+            this.unhighlightAllNodes();
+        }
+    }
+
+    updateProtocolChartFiltered(packets) {
+        if (!this.protocolChart) return;
+
+        const protoCounts = {};
+        packets.forEach(pkt => {
+            const proto = pkt.protocol || 'OTHER';
+            protoCounts[proto] = (protoCounts[proto] || 0) + 1;
+        });
+
+        const sorted = Object.entries(protoCounts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 8);
+
+        this.protocolChart.data.labels = sorted.map(e => e[0]);
+        this.protocolChart.data.datasets[0].data = sorted.map(e => e[1]);
+        this.protocolChart.update();
+    }
+
+    highlightFilteredTopology(packets) {
+        if (!this.nodesG) return;
+
+        // Collect IPs from filtered packets
+        const activeIPs = new Set();
+        packets.forEach(pkt => {
+            if (pkt.src) activeIPs.add(pkt.src);
+            if (pkt.dst) activeIPs.add(pkt.dst);
+        });
+
+        // Dim nodes not in filter
+        this.nodesG.selectAll('.node').each(function(d) {
+            const node = d3.select(this);
+            const isActive = activeIPs.has(d.id);
+            node.classed('dimmed', !isActive);
+            node.classed('highlighted', isActive);
+        });
+
+        // Dim links not connected to active nodes
+        this.linksG.selectAll('.link').each(function(d) {
+            const link = d3.select(this);
+            const srcId = d.source.id || d.source;
+            const tgtId = d.target.id || d.target;
+            const isActive = activeIPs.has(srcId) && activeIPs.has(tgtId);
+            link.attr('stroke-opacity', isActive ? 0.8 : 0.1);
+        });
     }
 
     evaluateFilter(pkt, filter, filterLower) {
@@ -1429,10 +1536,13 @@ class NetMap {
     clearFilter() {
         if (this.filterInput) this.filterInput.value = '';
         this.filteredPackets = null;
+        this.activeFilterExpr = null;  // Clear active filter
         this.selectedHost = null;
         this.renderPacketTable();
         this.updateStats();
         this.unhighlightAllNodes();
+        // Reset charts to show all data
+        this.updateChartsWithFilter();
     }
 
     filterByHost(ip) {
@@ -1440,6 +1550,9 @@ class NetMap {
         if (this.filterInput) {
             this.filterInput.value = `ip.addr == ${ip}`;
         }
+
+        // Store active filter for live filtering
+        this.activeFilterExpr = `ip.addr == ${ip}`;
 
         // Filter packets by this host
         this.filteredPackets = this.packets.filter(pkt =>
@@ -1801,7 +1914,8 @@ class NetMap {
         }, 1000);
     }
 
-    clearPackets() {
+    // Clear local data only (no server request)
+    clearLocalData() {
         this.packets = [];
         this.newestId = 0;
         this.totalBytes = 0;
@@ -1812,19 +1926,25 @@ class NetMap {
         this.nodes.clear();
         this.links.clear();
         this.ioGraphData = [];
+        this.filteredPackets = null;
+        this.activeFilterExpr = null;
         this.currentPage = 1;
-        this.startTime = this.capturing ? Date.now() : null;
 
-        this.packetTbody.innerHTML = '';
-        this.detailPlaceholder.style.display = 'flex';
-        this.detailContent.style.display = 'none';
+        if (this.packetTbody) this.packetTbody.innerHTML = '';
+        if (this.detailPlaceholder) this.detailPlaceholder.style.display = 'flex';
+        if (this.detailContent) this.detailContent.style.display = 'none';
 
         this.updateStats();
         this.updatePagination();
         this.updateCharts();
         this.updateTopology();
-        this.updateIOGraph();
+    }
 
+    clearPackets() {
+        this.clearLocalData();
+        this.startTime = this.capturing ? Date.now() : null;
+        this.updateIOGraph();
+        // Also clear server buffer
         fetch('/api/clear', { method: 'POST' }).catch(() => {});
     }
 
@@ -2126,6 +2246,10 @@ class NetMap {
 
         this.topologyG = this.topologySvg.append('g');
 
+        // Create separate groups for links (bottom) and nodes (top) to ensure proper z-order
+        this.linksG = this.topologyG.append('g').attr('class', 'links-layer');
+        this.nodesG = this.topologyG.append('g').attr('class', 'nodes-layer');
+
         // Zoom with smooth transitions
         this.topologyZoom = d3.zoom()
             .scaleExtent([0.1, 4])
@@ -2251,8 +2375,8 @@ class NetMap {
         const nodes = Array.from(this.nodes.values());
         const links = Array.from(this.links.values());
 
-        // Update links with smooth transitions
-        const link = this.topologyG.selectAll('.link')
+        // Update links with smooth transitions (in links layer - below nodes)
+        const link = this.linksG.selectAll('.link')
             .data(links, d => `${d.source.id || d.source}-${d.target.id || d.target}`);
 
         link.exit()
@@ -2275,8 +2399,8 @@ class NetMap {
             .attr('stroke-width', d => Math.min(1 + Math.log(d.packets + 1), 6))
             .attr('stroke', d => this.getLinkColor(d));
 
-        // Update nodes with smooth transitions
-        const node = this.topologyG.selectAll('.node')
+        // Update nodes with smooth transitions (in nodes layer - above links)
+        const node = this.nodesG.selectAll('.node')
             .data(nodes, d => d.id);
 
         node.exit()
@@ -2341,13 +2465,13 @@ class NetMap {
         this.simulation.alpha(0.3).restart();
 
         this.simulation.on('tick', () => {
-            this.topologyG.selectAll('.link')
+            this.linksG.selectAll('.link')
                 .attr('x1', d => d.source.x)
                 .attr('y1', d => d.source.y)
                 .attr('x2', d => d.target.x)
                 .attr('y2', d => d.target.y);
 
-            this.topologyG.selectAll('.node')
+            this.nodesG.selectAll('.node')
                 .attr('transform', d => `translate(${d.x},${d.y})`);
         });
     }
@@ -2505,6 +2629,22 @@ class NetMap {
         }
 
         this.simulation.alpha(1).restart();
+        this.topologyLayout = layout;
+    }
+
+    restoreSavedLayout() {
+        // Restore layout button state from localStorage
+        const savedLayout = this.topologyLayout;
+        const layoutGroup = document.getElementById('topology-layout-group');
+        if (layoutGroup) {
+            layoutGroup.querySelectorAll('.btn-toggle').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.layout === savedLayout);
+            });
+        }
+        // Apply layout if topology is ready
+        if (this.simulation && savedLayout !== 'force') {
+            setTimeout(() => this.changeLayout(savedLayout), 500);
+        }
     }
 
     resizeTopology() {
@@ -3177,12 +3317,13 @@ class NetMap {
     }
 
     updateIntervalChart() {
-        if (!this.intervalChart || this.packets.length < 2) return;
+        const packets = this.filteredPackets || this.packets;
+        if (!this.intervalChart || packets.length < 2) return;
 
         const binSize = parseFloat(document.getElementById('interval-binsize')?.value || 1);
 
         // Sort packets and calculate intervals
-        const sorted = [...this.packets].sort((a, b) => a.timestamp - b.timestamp);
+        const sorted = [...packets].sort((a, b) => a.timestamp - b.timestamp);
         const intervals = [];
         for (let i = 1; i < sorted.length; i++) {
             const interval = (sorted[i].timestamp - sorted[i-1].timestamp) * 1000; // to ms
@@ -3271,7 +3412,8 @@ class NetMap {
     }
 
     updateLengthChart() {
-        if (!this.lengthChart || this.packets.length === 0) return;
+        const packets = this.filteredPackets || this.packets;
+        if (!this.lengthChart || packets.length === 0) return;
 
         const binSize = parseInt(document.getElementById('length-binsize')?.value || 64);
 
@@ -3279,7 +3421,7 @@ class NetMap {
         const bins = new Map();
         let minLen = Infinity, maxLen = 0, totalLen = 0;
 
-        this.packets.forEach(pkt => {
+        packets.forEach(pkt => {
             const len = pkt.length;
             const bin = Math.floor(len / binSize) * binSize;
             bins.set(bin, (bins.get(bin) || 0) + 1);
@@ -3309,7 +3451,7 @@ class NetMap {
 
         document.getElementById('length-min').textContent = minLen;
         document.getElementById('length-max').textContent = maxLen;
-        document.getElementById('length-avg').textContent = Math.round(totalLen / this.packets.length);
+        document.getElementById('length-avg').textContent = Math.round(totalLen / packets.length);
         document.getElementById('length-mode').textContent = `${modeBin}-${modeBin + binSize - 1}`;
     }
 
@@ -4106,6 +4248,61 @@ class NetMap {
         document.querySelectorAll('.coloring-rule input[type="checkbox"]').forEach(cb => {
             cb.checked = true;
         });
+    }
+
+    // ==========================================
+    // Settings Dialog
+    // ==========================================
+    showSettingsDialog() {
+        const dialog = document.getElementById('settings-dialog');
+        if (!dialog) return;
+
+        // Load current values
+        document.getElementById('setting-poll-interval').value = this.pollIntervalMs;
+        document.getElementById('setting-poll-limit').value = this.packetPollLimit;
+        document.getElementById('setting-page-size').value = this.pageSize;
+        document.getElementById('setting-table-interval').value = this.tableRenderInterval;
+
+        dialog.style.display = 'flex';
+    }
+
+    hideSettingsDialog() {
+        const dialog = document.getElementById('settings-dialog');
+        if (dialog) dialog.style.display = 'none';
+    }
+
+    applySettings() {
+        // Read values from dialog
+        this.pollIntervalMs = parseInt(document.getElementById('setting-poll-interval').value) || 200;
+        this.packetPollLimit = parseInt(document.getElementById('setting-poll-limit').value) || 100;
+        this.pageSize = parseInt(document.getElementById('setting-page-size').value) || 100;
+        this.tableRenderInterval = parseInt(document.getElementById('setting-table-interval').value) || 100;
+
+        // Save to localStorage
+        localStorage.setItem('netmap-poll-interval', this.pollIntervalMs);
+        localStorage.setItem('netmap-poll-limit', this.packetPollLimit);
+        localStorage.setItem('netmap-page-size', this.pageSize);
+        localStorage.setItem('netmap-table-interval', this.tableRenderInterval);
+
+        // Restart polling with new interval if capturing
+        if (this.capturing && this.pollInterval) {
+            clearInterval(this.pollInterval);
+            this.pollInterval = setInterval(() => this.pollPackets(), this.pollIntervalMs);
+        }
+
+        // Re-render table with new page size
+        this.renderPacketTable();
+
+        this.hideSettingsDialog();
+        this.updateStatusInfo('Settings applied');
+    }
+
+    resetSettings() {
+        // Reset to defaults
+        document.getElementById('setting-poll-interval').value = 200;
+        document.getElementById('setting-poll-limit').value = 100;
+        document.getElementById('setting-page-size').value = 100;
+        document.getElementById('setting-table-interval').value = 100;
     }
 
     getPacketColorClass(pkt) {

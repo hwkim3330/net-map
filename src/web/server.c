@@ -172,9 +172,9 @@ static void handle_api_packets(struct mg_connection *c, struct mg_http_message *
     mg_http_get_var(&hm->query, "limit", limit_str, sizeof(limit_str));
 
     uint64_t from_id = from_str[0] ? strtoull(from_str, NULL, 10) : 0;
-    uint32_t limit = limit_str[0] ? (uint32_t)atoi(limit_str) : 100;
-    if (limit == 0) limit = 100;
-    if (limit > 1000) limit = 1000;
+    // Default to 0 = unlimited (return all available), capped at 10000 for safety
+    uint32_t limit = limit_str[0] ? (uint32_t)atoi(limit_str) : 0;
+    if (limit == 0 || limit > 10000) limit = 10000;
 
     packet_entry_t *entries;
     int count = buffer_get_range(srv->config.packet_buffer, from_id, limit, &entries);
@@ -301,6 +301,11 @@ static void handle_api_capture_start(struct mg_connection *c, struct mg_http_mes
         capture_stop(srv->capture);
         capture_close(srv->capture);
         srv->capture = NULL;
+    }
+
+    // Clear buffer when starting new capture on different interface
+    if (srv->config.packet_buffer) {
+        buffer_clear(srv->config.packet_buffer);
     }
 
     // Open new capture
