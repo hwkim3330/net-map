@@ -183,6 +183,10 @@
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
                         Scan
                     </button>
+                    <button class="tab" data-tab="generator">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                        Generator
+                    </button>
                 </div>
 
                 <!-- Topology Tab (Default) -->
@@ -415,6 +419,66 @@
                                     <tbody id="host-tbody"></tbody>
                                 </table>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Generator Tab -->
+                <div class="tab-content" id="tab-generator">
+                    <div class="generator-panel">
+                        <div class="generator-section">
+                            <h4 class="section-title">Packet Generation</h4>
+                            <div class="generator-row">
+                                <label class="gen-label">Count:</label>
+                                <input type="number" id="gen-tab-count" class="input-small" value="100" min="1" max="10000">
+                                <label class="gen-label">Protocol:</label>
+                                <select id="gen-tab-protocol" class="select-small">
+                                    <option value="TCP">TCP</option>
+                                    <option value="UDP">UDP</option>
+                                    <option value="ICMP">ICMP</option>
+                                    <option value="mixed">Mixed</option>
+                                </select>
+                                <label class="gen-label">Payload:</label>
+                                <input type="number" id="gen-tab-payload" class="input-small" value="64" min="0" max="1400">
+                                <span class="gen-hint">bytes</span>
+                            </div>
+                            <div class="generator-row">
+                                <label class="checkbox-small">
+                                    <input type="checkbox" id="gen-tab-random" checked> Random IPs/Ports
+                                </label>
+                            </div>
+                            <div class="generator-fixed" id="gen-tab-fixed" style="display: none;">
+                                <div class="generator-row">
+                                    <label class="gen-label">Source IP:</label>
+                                    <input type="text" id="gen-tab-src-ip" class="input-small" value="192.168.1.100">
+                                    <label class="gen-label">Port:</label>
+                                    <input type="number" id="gen-tab-src-port" class="input-small" value="12345" min="1" max="65535">
+                                </div>
+                                <div class="generator-row">
+                                    <label class="gen-label">Dest IP:</label>
+                                    <input type="text" id="gen-tab-dst-ip" class="input-small" value="192.168.1.1">
+                                    <label class="gen-label">Port:</label>
+                                    <input type="number" id="gen-tab-dst-port" class="input-small" value="80" min="1" max="65535">
+                                </div>
+                            </div>
+                            <div class="generator-row">
+                                <button id="gen-tab-btn" class="btn-primary">Generate Packets</button>
+                                <span id="gen-tab-status" class="gen-status"></span>
+                            </div>
+                        </div>
+                        <div class="generator-section">
+                            <h4 class="section-title">Presets</h4>
+                            <div class="generator-presets">
+                                <button class="btn-small preset-btn" data-preset="web-traffic">Web Traffic (HTTP/HTTPS)</button>
+                                <button class="btn-small preset-btn" data-preset="dns-queries">DNS Queries</button>
+                                <button class="btn-small preset-btn" data-preset="ping-sweep">Ping Sweep</button>
+                                <button class="btn-small preset-btn" data-preset="port-scan">Port Scan Pattern</button>
+                                <button class="btn-small preset-btn" data-preset="random-noise">Random Noise</button>
+                            </div>
+                        </div>
+                        <div class="generator-info">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                            Generate test packets to populate topology, charts, and statistics without actual network capture.
                         </div>
                     </div>
                 </div>

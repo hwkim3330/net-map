@@ -193,12 +193,22 @@ class NetMap {
         document.getElementById('settings-apply')?.addEventListener('click', () => this.applySettings());
         document.getElementById('settings-reset')?.addEventListener('click', () => this.resetSettings());
 
-        // Packet Generator
+        // Packet Generator (dialog)
         document.getElementById('generate-btn')?.addEventListener('click', () => this.showGenerateDialog());
         document.getElementById('generate-close')?.addEventListener('click', () => this.hideGenerateDialog());
         document.getElementById('generate-submit')?.addEventListener('click', () => this.generatePackets());
         document.getElementById('gen-random')?.addEventListener('change', (e) => {
             document.getElementById('gen-fixed-section').style.display = e.target.checked ? 'none' : 'block';
+        });
+
+        // Packet Generator (tab)
+        document.getElementById('gen-tab-btn')?.addEventListener('click', () => this.generatePacketsFromTab());
+        document.getElementById('gen-tab-random')?.addEventListener('change', (e) => {
+            document.getElementById('gen-tab-fixed').style.display = e.target.checked ? 'none' : 'block';
+        });
+        // Preset buttons
+        document.querySelectorAll('.preset-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => this.applyGeneratorPreset(e.target.dataset.preset));
         });
 
         // Follow Stream dialog
@@ -4369,6 +4379,112 @@ class NetMap {
         } catch (err) {
             statusEl.textContent = `Error: ${err.message}`;
         }
+    }
+
+    // Generator Tab methods
+    async generatePacketsFromTab() {
+        const count = parseInt(document.getElementById('gen-tab-count').value) || 100;
+        const protocol = document.getElementById('gen-tab-protocol').value;
+        const payloadSize = parseInt(document.getElementById('gen-tab-payload').value) || 64;
+        const random = document.getElementById('gen-tab-random').checked;
+
+        const params = {
+            count: count,
+            type: protocol === 'mixed' ? 'TCP' : protocol,
+            payload_size: payloadSize,
+            random: random
+        };
+
+        if (!random) {
+            params.src_ip = document.getElementById('gen-tab-src-ip').value;
+            params.dst_ip = document.getElementById('gen-tab-dst-ip').value;
+            params.src_port = parseInt(document.getElementById('gen-tab-src-port').value) || 12345;
+            params.dst_port = parseInt(document.getElementById('gen-tab-dst-port').value) || 80;
+        }
+
+        const statusEl = document.getElementById('gen-tab-status');
+        const btn = document.getElementById('gen-tab-btn');
+        btn.disabled = true;
+        statusEl.textContent = 'Generating...';
+
+        try {
+            // For mixed protocol, generate multiple batches
+            if (protocol === 'mixed') {
+                const protocols = ['TCP', 'UDP', 'ICMP'];
+                const perType = Math.ceil(count / 3);
+                let total = 0;
+                for (const proto of protocols) {
+                    params.type = proto;
+                    params.count = perType;
+                    const response = await fetch('/api/generate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(params)
+                    });
+                    const data = await response.json();
+                    if (data.success) total += data.generated;
+                }
+                statusEl.textContent = `Generated ${total} packets`;
+            } else {
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(params)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    statusEl.textContent = `Generated ${data.generated} packets`;
+                } else {
+                    statusEl.textContent = `Error: ${data.error || 'Failed'}`;
+                }
+            }
+            this.pollPackets();
+        } catch (err) {
+            statusEl.textContent = `Error: ${err.message}`;
+        }
+        btn.disabled = false;
+    }
+
+    applyGeneratorPreset(preset) {
+        const countEl = document.getElementById('gen-tab-count');
+        const protoEl = document.getElementById('gen-tab-protocol');
+        const payloadEl = document.getElementById('gen-tab-payload');
+        const randomEl = document.getElementById('gen-tab-random');
+
+        switch (preset) {
+            case 'web-traffic':
+                countEl.value = 200;
+                protoEl.value = 'TCP';
+                payloadEl.value = 512;
+                randomEl.checked = true;
+                break;
+            case 'dns-queries':
+                countEl.value = 50;
+                protoEl.value = 'UDP';
+                payloadEl.value = 64;
+                randomEl.checked = true;
+                break;
+            case 'ping-sweep':
+                countEl.value = 100;
+                protoEl.value = 'ICMP';
+                payloadEl.value = 56;
+                randomEl.checked = true;
+                break;
+            case 'port-scan':
+                countEl.value = 500;
+                protoEl.value = 'TCP';
+                payloadEl.value = 0;
+                randomEl.checked = true;
+                break;
+            case 'random-noise':
+                countEl.value = 1000;
+                protoEl.value = 'mixed';
+                payloadEl.value = 128;
+                randomEl.checked = true;
+                break;
+        }
+        // Update fixed section visibility
+        document.getElementById('gen-tab-fixed').style.display = randomEl.checked ? 'none' : 'block';
     }
 
     getPacketColorClass(pkt) {
