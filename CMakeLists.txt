@@ -93,6 +93,14 @@ target_link_libraries(net-map
     ${PLATFORM_LIBS}
 )
 
+# Copy static files to build directory after build
+add_custom_command(TARGET net-map POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_SOURCE_DIR}/src/web/static
+    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/static
+    COMMENT "Copying static files to build directory"
+)
+
 # Install
 install(TARGETS net-map RUNTIME DESTINATION bin)
 install(DIRECTORY src/web/static/ DESTINATION share/net-map/static)
