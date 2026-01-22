@@ -136,6 +136,7 @@ class NetMap {
         document.getElementById('topology-labels')?.addEventListener('change', (e) => this.toggleLabels(e.target.checked));
         document.getElementById('topology-layout')?.addEventListener('change', (e) => this.changeLayout(e.target.value));
         document.getElementById('topology-animate')?.addEventListener('change', (e) => this.toggleAnimation(e.target.checked));
+        document.getElementById('topology-physics')?.addEventListener('change', (e) => this.togglePhysics(e.target.checked));
         document.getElementById('topology-search')?.addEventListener('input', (e) => this.searchTopology(e.target.value));
         document.getElementById('info-close')?.addEventListener('click', () => this.closeTopologyInfo());
         document.getElementById('info-filter')?.addEventListener('click', () => this.filterFromInfo());
@@ -903,7 +904,6 @@ class NetMap {
             // Sync capture state with server
             const serverCapturing = data.capturing === true;
             if (serverCapturing !== this.capturing) {
-                console.log(`Sync: server capturing=${serverCapturing}, client=${this.capturing}`);
                 this.capturing = serverCapturing;
                 this.updateCaptureUI();
 
@@ -914,9 +914,26 @@ class NetMap {
                 }
             }
 
-            // Update server-side stats
+            // Sync device selection with server
+            if (serverCapturing && data.device && this.deviceSelect) {
+                const currentDevice = this.deviceSelect.value;
+                if (currentDevice !== data.device) {
+                    // Find and select the matching option
+                    for (let i = 0; i < this.deviceSelect.options.length; i++) {
+                        if (this.deviceSelect.options[i].value === data.device) {
+                            this.deviceSelect.selectedIndex = i;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Update server-side stats display
             if (data.buffer_count !== undefined) {
-                // Server has packets we might not have fetched yet
+                // Update stats from server
+                if (this.statPackets) {
+                    this.statPackets.textContent = data.buffer_count.toLocaleString();
+                }
             }
         } catch (error) {
             console.error('Status poll failed:', error);
@@ -1133,12 +1150,20 @@ class NetMap {
         // Update table (throttled)
         if (now - this.lastTableRender >= this.tableRenderInterval) {
             this.lastTableRender = now;
-            const totalPages = Math.ceil(this.packets.length / this.pageSize);
-            if (this.autoScroll || this.currentPage === totalPages - 1) {
+            const totalPages = Math.ceil(this.packets.length / this.pageSize) || 1;
+            if (this.autoScroll) {
                 this.currentPage = totalPages;
             }
             this.renderPacketTable();
             this.updatePagination();
+
+            // Scroll to bottom if autoScroll is enabled
+            if (this.autoScroll && this.packetTbody) {
+                const container = this.packetTbody.closest('.packet-list') || this.packetTbody.parentElement;
+                if (container) {
+                    container.scrollTop = container.scrollHeight;
+                }
+            }
         }
 
         // Update stats (always - lightweight)
@@ -2125,6 +2150,7 @@ class NetMap {
         window.addEventListener('resize', () => this.resizeTopology());
 
         this.topologyAnimate = true;
+        this.topologyPhysics = true;
     }
 
     updateTopologyData(pkt) {
@@ -2504,6 +2530,25 @@ class NetMap {
                 this.simulation.alpha(0.3).restart();
             } else {
                 this.simulation.stop();
+            }
+        }
+    }
+
+    togglePhysics(enabled) {
+        this.topologyPhysics = enabled;
+        if (this.simulation) {
+            if (enabled) {
+                // Re-enable forces
+                this.simulation
+                    .force('charge', d3.forceManyBody().strength(-200).distanceMax(300))
+                    .force('collision', d3.forceCollide().radius(25).strength(0.7))
+                    .alpha(0.3).restart();
+            } else {
+                // Disable forces - nodes stay in place
+                this.simulation
+                    .force('charge', null)
+                    .force('collision', null)
+                    .stop();
             }
         }
     }
