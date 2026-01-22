@@ -110,6 +110,18 @@ Scanner Features:
 - Results in table or grid view
 - Export discovered hosts
 
+### Packet Generator
+
+Generate test packets for debugging and testing:
+
+| Option | Description |
+|--------|-------------|
+| **Protocol** | TCP, UDP, or ICMP |
+| **Count** | Number of packets to generate (1-10000) |
+| **Payload Size** | Custom payload size (0-1400 bytes) |
+| **Random IPs** | Generate random source/destination IPs |
+| **Fixed IPs** | Specify exact IP addresses and ports |
+
 ---
 
 ## Installation
@@ -222,6 +234,12 @@ Open **http://localhost:8080** in your browser.
 | `/api/scan/status` | GET | Get scan progress |
 | `/api/scan/results` | GET | Get discovered hosts |
 
+### Generator API
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/generate` | POST | Generate test packets |
+
 ### Example API Calls
 
 ```bash
@@ -239,6 +257,11 @@ curl -X POST -d "action=start" http://localhost:8080/api/control
 
 # Start ARP scan
 curl -X POST -d "type=arp&target=192.168.1.0/24" http://localhost:8080/api/scan/start
+
+# Generate test packets
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"count": 100, "type": "TCP", "random": true}' \
+  http://localhost:8080/api/generate
 ```
 
 ---
@@ -291,11 +314,15 @@ net-map/
 
 | Key | Action |
 |-----|--------|
+| `Ctrl+E` | Toggle capture |
+| `F5` | Start capture |
+| `F6` | Stop capture |
+| `Ctrl+S` | Save PCAP |
 | `Ctrl+F` | Focus filter input |
+| `Ctrl+Up/Down` | Navigate packets |
+| `Ctrl++/-` | Zoom in/out |
+| `F11` | Toggle fullscreen |
 | `Escape` | Clear selection / Close modal |
-| `Up/Down` | Navigate packet list |
-| `Enter` | Show packet details |
-| `C` | Copy selected value |
 
 ---
 
