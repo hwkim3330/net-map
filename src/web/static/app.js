@@ -208,7 +208,10 @@ class NetMap {
         });
         // Preset buttons
         document.querySelectorAll('.preset-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => this.applyGeneratorPreset(e.target.dataset.preset));
+            btn.addEventListener('click', (e) => {
+                const preset = e.target.closest('.preset-btn')?.dataset.preset;
+                if (preset) this.applyGeneratorPreset(preset);
+            });
         });
 
         // Follow Stream dialog
@@ -2960,48 +2963,59 @@ class NetMap {
             bucket.bytes += pkt.length;
         });
 
-        // Build chart data
+        // Build chart data - only use buckets that have data (sparse)
         const labels = [];
         const data = [];
-        const maxBucket = Math.max(...buckets.keys());
+        const sortedBuckets = [...buckets.keys()].sort((a, b) => a - b);
 
-        for (let i = 0; i <= maxBucket; i++) {
-            const bucket = buckets.get(i) || { packets: 0, bytes: 0 };
-            const timeOffset = (i * interval / 1000).toFixed(interval < 100 ? 3 : 1);
-            labels.push(`${timeOffset}s`);
-
-            let value = 0;
-            if (yaxis === 'packets') {
-                value = bucket.packets;
-            } else if (yaxis === 'bytes') {
-                value = bucket.bytes;
-            } else if (yaxis === 'bits') {
-                value = (bucket.bytes * 8) / (interval / 1000); // bits per second
-            }
-            data.push(value);
-        }
-
-        // Limit data points for performance
-        const maxPoints = 500;
-        if (labels.length > maxPoints) {
-            const step = Math.ceil(labels.length / maxPoints);
-            const newLabels = [];
-            const newData = [];
-            for (let i = 0; i < labels.length; i += step) {
-                newLabels.push(labels[i]);
-                // Sum values in this range
-                let sum = 0;
-                for (let j = i; j < Math.min(i + step, data.length); j++) {
-                    sum += data[j];
+        // Safety check: limit total buckets to prevent memory issues
+        const maxBuckets = 1000;
+        if (sortedBuckets.length > maxBuckets) {
+            // Downsample by grouping buckets
+            const step = Math.ceil(sortedBuckets.length / maxBuckets);
+            for (let i = 0; i < sortedBuckets.length; i += step) {
+                let packets = 0, bytes = 0;
+                let lastIdx = sortedBuckets[i];
+                for (let j = i; j < Math.min(i + step, sortedBuckets.length); j++) {
+                    const bucket = buckets.get(sortedBuckets[j]);
+                    packets += bucket.packets;
+                    bytes += bucket.bytes;
+                    lastIdx = sortedBuckets[j];
                 }
-                newData.push(sum);
+                const timeOffset = (lastIdx * interval / 1000).toFixed(interval < 100 ? 3 : 1);
+                labels.push(`${timeOffset}s`);
+
+                let value = 0;
+                if (yaxis === 'packets') {
+                    value = packets;
+                } else if (yaxis === 'bytes') {
+                    value = bytes;
+                } else if (yaxis === 'bits') {
+                    value = (bytes * 8) / ((interval * step) / 1000);
+                }
+                data.push(value);
             }
-            this.ioGraphChart.data.labels = newLabels;
-            this.ioGraphChart.data.datasets[0].data = newData;
         } else {
-            this.ioGraphChart.data.labels = labels;
-            this.ioGraphChart.data.datasets[0].data = data;
+            // Use actual bucket indices (sparse - skip empty ones)
+            for (const idx of sortedBuckets) {
+                const bucket = buckets.get(idx);
+                const timeOffset = (idx * interval / 1000).toFixed(interval < 100 ? 3 : 1);
+                labels.push(`${timeOffset}s`);
+
+                let value = 0;
+                if (yaxis === 'packets') {
+                    value = bucket.packets;
+                } else if (yaxis === 'bytes') {
+                    value = bucket.bytes;
+                } else if (yaxis === 'bits') {
+                    value = (bucket.bytes * 8) / (interval / 1000);
+                }
+                data.push(value);
+            }
         }
+
+        this.ioGraphChart.data.labels = labels;
+        this.ioGraphChart.data.datasets[0].data = data;
 
         // Update Y-axis label
         const yaxisLabel = yaxis === 'packets' ? 'Packets' : (yaxis === 'bytes' ? 'Bytes' : 'Bits/s');

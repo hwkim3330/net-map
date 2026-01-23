@@ -129,12 +129,16 @@ Generate test packets for debugging and testing:
 ### Prerequisites
 
 #### Windows
-```
-- Npcap (https://npcap.com/) - Install with "WinPcap API-compatible Mode"
-- CMake 3.10+
-- Ninja (recommended) or Visual Studio
-- Clang/LLVM or MSVC
-```
+1. **Npcap** - https://npcap.com/
+   - Install with "WinPcap API-compatible Mode" checked
+   - For WiFi capture, also check "Support raw 802.11 traffic"
+2. **Npcap SDK** - https://npcap.com/#download
+   - Extract to `C:\npcap-sdk` (or update path in CMakeLists.txt)
+3. **MSYS2/MinGW-w64** - https://www.msys2.org/
+   ```bash
+   # In MSYS2 terminal:
+   pacman -S mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja mingw-w64-x86_64-gcc
+   ```
 
 #### Linux
 ```bash
@@ -142,6 +146,21 @@ sudo apt install libpcap-dev cmake ninja-build build-essential
 ```
 
 ### Build from Source
+
+#### Quick Build (Recommended)
+
+**Windows (CMD or PowerShell):**
+```cmd
+build.bat
+```
+
+**Linux:**
+```bash
+chmod +x build.sh
+./build.sh
+```
+
+#### Manual Build
 
 ```bash
 # Clone
@@ -156,6 +175,15 @@ cmake --build build
 
 # Output: build/bin/net-map (or net-map.exe on Windows)
 ```
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| `Permission denied` when building | Close running net-map.exe first |
+| `wpcap.h not found` | Set correct Npcap SDK path in CMakeLists.txt |
+| WiFi interfaces not listed | Enable npcap_wifi service (Admin PowerShell): `sc config npcap_wifi start= demand && sc start npcap_wifi` |
+| `cmake not found` | Add MinGW bin to PATH or use full path |
 
 ---
 
